@@ -1,0 +1,35 @@
+# Model paramters
+# Size
+POLICY_COUNT = 30
+AGENTS_COUNT = 500
+N_EPOCHS = 1000
+# Agents initialisation
+INIT_CONNECTIONS_PROB = 0.02
+INIT_ORIENTATIONS_MEAN = 0
+INIT_ORIENTATIONS_STD = 0.4
+INIT_EMOTIONS_MEAN = 0.5
+INIT_EMOTIONS_STD = 0.2
+MEDIA_CONFORMITY_MEAN = 0.2
+MEDIA_CONFORMITY_STD = 0.1
+# Media parameters
+MEDIA_OUTLETS_MEANS = [-0.5, 0, 0.5]
+MEDIA_OUTLETS_STD = [0.1, 0.2, 0.1]
+# Noise
+NOISE_MEAN = 0.5
+NOISE_STD = 0.2
+
+# Boundaries
+OPINION_MAX = 1
+OPINION_MIN = -1
+ORIENTATION_MAX = 1
+ORIENTATION_MIN = -1
+EMOTION_MIN = 0
+EMOTION_MAX = 1
+NOISE_MIN = 0
+NOISE_MAX = 1
+
+# Tracing
+VERBOSE = False 
+N_SNAPSHOTS = 101
+SAVE_RESULTS = False
+DATA_DIR = "/Users/joaovictorreis/Documents/Masters/Modules Codebase/Adaptive Systems/Coursework/Coursework 2/data/"
