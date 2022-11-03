@@ -10,208 +10,261 @@ from configuration import *
 from agent import Agent
 
 
-
 class Model:
 
     def __init__(self):
         # Initialise social network
-        social_graph = random_graphs.erdos_renyi_graph(AGENTS_COUNT, INIT_CONNECTIONS_PROB, seed=1)
+        social_graph = random_graphs.erdos_renyi_graph(
+            AGENTS_COUNT, INIT_CONNECTIONS_PROB, seed=1)
         self.adjacency_matrix = nx.to_numpy_array(social_graph)
         
         # Initialise agents
-        agents_orientations = np.random.normal(INIT_ORIENTATIONS_MEAN, INIT_ORIENTATIONS_STD, AGENTS_COUNT)
-        agents_orientations = np.clip(agents_orientations, ORIENTATION_MIN, ORIENTATION_MAX)
-        agents_emotions = np.random.normal(INIT_ORIENTATIONS_MEAN, INIT_ORIENTATIONS_STD, AGENTS_COUNT)
+        # Draw orientation, emotion and media conformity values from
+        # normal distribution for all agents, then make sure to clip them to
+        # boundaries
+        agents_orientations = np.random.normal(
+            INIT_ORIENTATIONS_MEAN, INIT_ORIENTATIONS_STD, AGENTS_COUNT)
+        agents_orientations = np.clip(
+            agents_orientations, ORIENTATION_MIN, ORIENTATION_MAX)
+        # We store the values for emotions and conformities
+        self.agents_emotions = np.random.normal(
+            INIT_EMOTIONS_MEAN, INIT_EMOTIONS_STD, AGENTS_COUNT)
+        self.agents_emotions = np.clip(self.agents_emotions, EMOTION_MIN, EMOTION_MAX)
+        self.media_conformities = np.random.normal(
+            MEDIA_CONFORMITY_MEAN, MEDIA_CONFORMITY_STD, AGENTS_COUNT)
+        self.media_conformities = np.clip(
+            self.media_conformities, MEDIA_CONFORMITY_MIN, MEDIA_CONFORMITY_MAX)
         
+        # Populate the agents array. The agents initilisation draws values
+        # for their opinion array based on initial orientation and emotion.
+        self.agents = [
+            Agent(i, agents_orientations[i], self.agents_emotions[i],
+                  self.adjacency_matrix[i], self.media_conformities[i])
+            for i in range(AGENTS_COUNT)
+        ]
         
+        # Refreshing the second degree adjacency also updates agents
+        self.update_second_degree_adjacency()
+
+        # Initialise dynamic aggregation arrays
+        # We first refresh opinions local arrays
+        self.refresh_group_opinions()
+        self.refresh_media_opinions()
+        # Based on the media and group opinions, the trust is updated
+        for agent in self.agents:
+            agent.update_agents_trust(self.group_opinions)
+            agent.update_media_trust(self.media_opinions)
+        # And local arrays refreshed
+        self.refresh_group_trust()
+        self.refresh_media_trust()
+
+        self.epoch = 0
+
+    def step(self):
+        #######################################################################
+        #   1.  Opinion interaction
+        #######################################################################
+        # We got all we need to calculate opinion influences
+        # Get the total group and total media influence based on trust in each element
+        group_influence = np.matmul(self.group_trust, self.group_opinions)
+        media_influence = np.matmul(self.media_trust, self.media_opinions)
+
+        # Then calculate total external influence, weighted by media conformity
+        external_influence = (group_influence.T * (1 - self.media_conformities)).T \
+            + (media_influence.T * self.media_conformities).T
+
+        # Get noise from communications innacuracies
+        comms_noise = np.random.normal(
+            NOISE_MEAN, NOISE_STD, (AGENTS_COUNT, POLICIES_COUNT))
+        noise_influence = (comms_noise.T * (1 - self.agents_emotions)).T
+
+        # Print state if required
+        if VERBOSITY & V_MODEL:
+            print('\n* Group influence:')
+            print_array(group_influence)
+            print('\n* Media influence:')
+            print_array(media_influence)
+            print('\n* Media conformities:')
+            print_array(self.media_conformities)
+            print('\n* Group influence updated:')
+            print_array((group_influence.T * (1 - self.media_conformities)).T)
+            print('\n* Media influence updated:')
+            print_array((media_influence.T * self.media_conformities).T)
+            print('\n* External influence:')
+            print_array(external_influence)
+            print('\n* Noise influence:')
+            print_array(noise_influence)
+
+        # Now update each agent's opinion by making it interact with the calculated
+        # external influence. The opinions will also suffer some noise that represents
+        # communication innacuracies.
+        if np.isnan(external_influence).any():
+            print("got a nan")
+        for i in range(AGENTS_COUNT):
+            self.agents[i].interact(external_influence[i])
+            self.agents[i].add_noise(noise_influence[i])
+            
+        # Refresh local opinion arrays
+        self.refresh_group_opinions()
+        self.refresh_media_opinions()
+
+        #######################################################################
+        #   2.  Social network update
+        #######################################################################
+        # We first update the second adjacency matrix and arrays for each agent
+        self.update_second_degree_adjacency()
         
-        self.n_agents = len(agents_orientation)
-        self.emotions_mean = emotions_mean
-        self.emotions_std = emotions_std
+        # Based on similarities with first and second degree connections, the
+        # agents social network gets updated
+        for agent in self.agents:
+            agent.update_agents_similarities(self.group_opinions)
+            create_connections, end_connections = agent.update_social_network()
+            # End the connections symmetrically 
+            for connection in end_connections:
+                add_destruction()
+                self.agents[agent.id].adjacency[connection] = 0
+                self.agents[connection].adjacency[agent.id] = 0
+            # Create new connections symmetrically 
+            for connection in create_connections:
+                add_creation()
+                self.agents[agent.id].adjacency[connection] = 1
+                self.agents[connection].adjacency[agent.id] = 1
         
-        agents_emotion = np.random.normal(INIT_EMOTIONS_MEAN, INIT_EMOTIONS_STD, self.n_agents)
-        agents_emotion = np.clip(agents_emotion, EMOTION_MIN, EMOTION_MAX)
-        
-        
-        self.agents = [Agent(i, agents_orientation[i], agents_emotion[i], policies_orientations, self.orientations_normal) for i in range(self.n_agents)]
-        
-        self.noise_intensity_mean = noise_intensity_mean
-        self.noise_intensity_std = noise_intensity_std
-    
-    
-    
-    
-    
+        #######################################################################
+        #   3.  Trust matrices update
+        #######################################################################
+        # Based on the media and group opinions, the trust is updated
+        for agent in self.agents:
+            agent.update_agents_trust(self.group_opinions)
+            agent.update_media_trust(self.media_opinions)
+            
+        # And local arrays refreshed
+        self.refresh_group_trust()
+        self.refresh_media_trust()
+
+
+    def refresh_group_opinions(self):
+        self.group_opinions = np.array(
+            [agent.opinions for agent in self.agents]
+        )
+        if VERBOSITY & V_MODEL:
+            print('****************************************')
+            print('*\tGroup opinions refreshed:')
+            print_array(self.group_opinions)
+
+    def refresh_group_trust(self):
+        self.group_trust = np.array(
+            [agent.agents_trust for agent in self.agents]
+        )
+        if VERBOSITY & V_MODEL:
+            print('****************************************')
+            print('*\tGroup trust refreshed:')
+            print_array(self.group_trust)
+
+    def refresh_media_opinions(self):
+        self.media_opinions = np.array(
+            [
+                np.random.normal(
+                    MEDIA_OUTLETS_MEANS[i],
+                    MEDIA_OUTLETS_STD[i],
+                    POLICIES_COUNT
+                ) for i in range(MEDIA_OUTLETS_COUNT)
+            ]
+        )
+        self.media_opinions = np.clip(
+            self.media_opinions, OPINION_MIN, OPINION_MAX)
+
+        if VERBOSITY & V_MODEL:
+            print('****************************************')
+            print('*\tMedia opinions refreshed:')
+            print_array(self.media_opinions)
+
+    def refresh_media_trust(self):
+        self.media_trust = np.array(
+            [agent.media_trust for agent in self.agents]
+        )
+        if VERBOSITY & V_MODEL:
+            print('****************************************')
+            print('*\tMedia trust refreshed:')
+            print_array(self.media_trust)
+
     def update_second_degree_adjacency(self):
-        for i in range(len(self.adjacency_matrix)):
-            for j in range(len(self.adjacency_matrix[i])):
+        # Reset current state
+        self.second_adjacency = np.zeros((AGENTS_COUNT, AGENTS_COUNT))
+        # Iterate all rows of the adjacency matrix
+        for i in range(AGENTS_COUNT):
+            # Run though all columns for possible connected agents
+            for j in range(AGENTS_COUNT):
                 # Skip non connected agents
                 if self.adjacency_matrix[i][j] == 0:
                     continue
-                
                 # For each connected agent j, we find all j's connection
                 j_connections = np.where(self.adjacency_matrix[j] == 1)
                 # Then add the second degree connection to the right column in i row
                 for connection in j_connections[0]:
-                    # But do not record agent's second connections to itself
-                    if i != connection:
+                    # But do not record agent's second connections to itself,
+                    # or record second connections of who's directly connected
+                    if i != connection and self.adjacency_matrix[i][connection] == 0:
                         self.second_adjacency[i][connection] += 1
-        
-        
-    def update_agents(self, interactions):
-        """
-        Performs a time step from the agents' popuylation perspective.
-        n_interaction pairs will be drawn from the population, to which the first part (the active one) will update
-        its opinion vector by interacting with the passive part of the pair and with ambient noise.
-        After updating opinions, the agents' orientation is updated to the new opinions vector.
-        
-        Args:
-            interactions (int): Number of agents to be updated
-        """
-        # We choose, from a uniform distribution, epoch_interactions pairs of agents that will interact in this epoch
-        interaction_indexes = np.random.randint(0, self.n_agents, (interactions, 2))
-        # We then iterate over each pair
-        for indexes in interaction_indexes:
-            agent = self.agents[indexes[0]]
-            other = self.agents[indexes[1]]
-            
-            if VERBOSE:
-                print("----------------------------------------")
-                print(f"Interacting agent {indexes[0]} (orientation {agent.orientation:.3f}) and agent {indexes[1]} " +  
-                        f"(orientation {other.orientation:.3f})\tangle:{np.degrees(agent.get_angle(other.opinions)):.1f} ")
-                
-            agent.interact(other.opinions)
-            if VERBOSE:
-                print(f"Post interaction angle: {np.degrees(agent.get_angle(other.opinions)):.1f} ")
-            agent.add_noise(self.noise_opinions, self.noise_intensity)                
-            agent.update_orientation(self.policies_orientations, self.orientations_normal)
-            
-            
-    def update_noise(self):
-        """
-        Updates the noise opinion vector and intensity.
-        """
-        # First update trend opinions
-        noise_orientation = np.random.uniform(ORIENTATION_MIN, ORIENTATION_MAX)
-        self.noise_opinions = []
-        for policy_orientation in self.policies_orientations:
-            # Mean of agent's opinion on the policy should be 1 if orientation distance is 0, and -1 if 2
-            orientation_distance = np.abs(noise_orientation - policy_orientation)
-            opinion_mean = 0.5 * (orientation_distance - 2)**2 - 1
-            # Standard deviation on agent's opinion will depend on how radical the policy orientation is
-            # should be narrow for values closer to abs 1 (0.1) and wider for close to 0 (0.3)
-            opinion_std = 0.1 - 0.05 * np.abs(policy_orientation) 
-            # Now add an opinion
-            self.noise_opinions.append(np.random.normal(opinion_mean, opinion_std))   
-        # Make sure we clip to limits
-        self.noise_opinions = np.clip(self.noise_opinions, OPINION_MIN, OPINION_MAX)
-        # Then update intensity
-        self.noise_intensity = np.random.normal(self.noise_intensity_mean, self.noise_intensity_std)
-        # Make sure we clip to limits
-        self.noise_intensity = np.clip(self.noise_intensity, NOISE_MIN, NOISE_MAX)
-                
-            
-    def summon_radical(self, radicals_count, radical_side):
-        """
-        Summons radicals from the population by selecting the radicals_count agents that have their
-        orientation value closest to radical_side. The selected agents then have their orientation set to radical_side value,
-        affectiveness set to close to boundary value and opinions reinitialised based on new parameters.
+            # Then update at agent level
+            self.agents[i].second_adjacency = self.second_adjacency[i]
 
-        Args:
-            radicals_count (int): The number of radicals to summon
-            radical_side (enum): The side that the radicals should be summoned to (-1, 1)
-        """
-        orientations_array = np.array([self.agents[i].orientation * radical_side for i in range(self.n_agents)])
-        radicals = orientations_array.argsort()[-radicals_count:][::-1]
-        
-        for id in radicals:
-            radical = self.agents[id]
-            radical.orientation = radical_side
-            radical.emotion = np.random.normal(1, 0.05)
-            radical.emotion = np.clip(radical.emotion, EMOTION_MIN, EMOTION_MAX)
-            radical.initialise_opinions(self.policies_orientations, self.policies_orientations)
-            
-            
+
     def get_pca_snapshot(self):
-        """
-        Retrieves a 2-PCA analysis of the concatenation of all agents' opinion vectors
-
-        Returns:
-            [array of floats, float]: The 2-PCA components array and the explained variance ratio
-        """
-        opinions_list = [ self.agents[i].opinions for i in range(self.n_agents) ]
+        opinions_list = [self.agents[i].opinions for i in range(self.n_agents)]
         opinion_array = np.array(opinions_list)
-        pca = PCA(n_components=2, random_state=0, svd_solver="full")
+        pca = PCA(n_components=2, random_state=0, svd_solver='full')
         components = pca.fit_transform(opinion_array)
         return components, pca.explained_variance_ratio_
 
-            
-    def run_simulation(self, n_epochs, interaction_ratio=0.05, N_SNAPSHOTS=0, radicals=None, save_data=False):
-        """
-        Actually runs the whole simulation process by iterating on given epochs, updating agents and noise,
-        and saving snapshots or summining radicals when required
-
-        Args:
-            n_epochs (int): number of epochs to run the simulation for
-            interaction_ratio (float, optional): The ratio of the agents' population that will interact during each epoch. Defaults to 0.05.
-            N_SNAPSHOTS (int, optional): Number of state snapshots to take during the simulation. Defaults to 0.
-            radicals (dict, optional): Dictionary with epoch, count and side info of instructions to summon radicals. Defaults to None.
-            save_data (bool, optional): Whether to save simulation data to file. Defaults to False.
-
-        Returns:
-            [dict]: The simulation info dictionary with metadata and snapshots taken
-        """
-        epoch_interactions = int(self.n_agents * interaction_ratio)
+    def run(self, n_epochs: int):
         snapshot_epochs = np.linspace(0, n_epochs, N_SNAPSHOTS).astype(int)
         self.snapshots = []
-        print(f"Running simulation for {n_epochs} epochs with {epoch_interactions} interactions/epoch. Snapshots will be taken in {snapshot_epochs}")
-        
-        for epoch in range(0, n_epochs + 1):
-            # Check if we need to summon radicals in the population
-            if radicals and epoch in radicals["epochs"]:
-                radical_index = radicals["epochs"].index(epoch)
-                self.summon_radical(radicals["counts"][radical_index], radicals["sides"][radical_index])
-                
-            # Store snapshots for animations
-            if epoch in snapshot_epochs:
-                pca_components, pca_variance = self.get_pca_snapshot()
+        print('\n********************************************************************************\n')
+        print(f'Starting model run for {n_epochs} epochs.\n')
 
-                self.snapshots.append({
-                    "epoch": epoch,
-                    "pca": pca_components,
-                    "pca_variance": pca_variance,
-                    "orientations": [self.agents[i].orientation for i in range(self.n_agents)],
-                    "neg_ratio": np.sum([int(self.agents[i].orientation  < 0) for i in range(self.n_agents)]) / self.n_agents * 100.0
-                })              
-            
-            # Step noise and agents
-            self.update_noise()
-            self.update_agents(epoch_interactions)
-        
+        # Start epoch from 0 so we save the initial state before stepping
+        for self.epoch in range(0, n_epochs + 1):
             # Print status on each 10%
-            if epoch % (n_epochs / 10) == 0:
-                print(f"{int(epoch/n_epochs * 100)}%")
-            
-        # Build the simulation info
-        simulation_info = {
-            "n_agents": self.n_agents,
-            "n_policies": self.n_policies,
-            "n_epochs": n_epochs,
-            "policies_neg": self.policies_neg,
-            "policies_mean": self.policies_mean,
-            "policies_std": self.policies_std,
-            "interaction_ratio": interaction_ratio,
-            "emotions_mean": self.emotions_mean,
-            "emotions_std": self.emotions_std,
-            "noise_intensity_mean": self.noise_intensity_mean,
-            "noise_intensity_std": self.noise_intensity_std,
-            "snapshots": self.snapshots
-        }
-        # Save snaphsots to file
-        if save_data:
-            timestamp = datetime.now().strftime("%m-%d-%H.%M")
-            filename = DATA_DIR + timestamp + f"-run-({self.n_agents}|{n_epochs}|{self.n_policies}|{self.policies_neg}|{self.policies_mean}|{self.policies_std}|{interaction_ratio}|{N_SNAPSHOTS}|{self.emotions_mean:.2f}|{self.emotions_std:.2f}|{self.noise_intensity_mean:.2f}|{self.noise_intensity_std:.2f}).dat"
-            print(f"Saving snapshots data to: {filename}")
-            pickle.dump(simulation_info, open(filename, "wb"))
-            
-        return simulation_info
+            if self.epoch % (n_epochs / 10) == 0:
+                print(f'Run progress:\t{int(self.epoch/n_epochs * 100)}%')
+
+            # # Store snapshots for plotting
+            # if epoch in snapshot_epochs:
+            #     pca_components, pca_variance = self.get_pca_snapshot()
+
+            #     self.snapshots.append({
+            #         'epoch': epoch,
+            #         'pca': pca_components,
+            #         'pca_variance': pca_variance,
+            #         'orientations': [self.agents[i].orientation for i in range(self.n_agents)],
+            #         'neg_ratio': np.sum([int(self.agents[i].orientation < 0) for i in range(self.n_agents)]) / self.n_agents * 100.0
+            #     })
+
+            # Step the model
+            self.step()
+
+        # # Build the simulation info
+        # simulation_info = {
+        #     'n_agents': self.n_agents,
+        #     'n_policies': self.n_policies,
+        #     'n_epochs': n_epochs,
+        #     'policies_neg': self.policies_neg,
+        #     'policies_mean': self.policies_mean,
+        #     'policies_std': self.policies_std,
+        #     'interaction_ratio': interaction_ratio,
+        #     'emotions_mean': self.emotions_mean,
+        #     'emotions_std': self.emotions_std,
+        #     'noise_intensity_mean': self.noise_intensity_mean,
+        #     'noise_intensity_std': self.noise_intensity_std,
+        #     'snapshots': self.snapshots
+        # }
+        # # Save snaphsots to file
+        # if save_data:
+        #     timestamp = datetime.now().strftime('%m-%d-%H.%M')
+        #     filename = DATA_DIR + timestamp + \
+        #         f'-run-({self.n_agents}|{n_epochs}|{self.n_policies}|{self.policies_neg}|{self.policies_mean}|{self.policies_std}|{interaction_ratio}|{N_SNAPSHOTS}|{self.emotions_mean:.2f}|{self.emotions_std:.2f}|{self.noise_intensity_mean:.2f}|{self.noise_intensity_std:.2f}).dat'
+        #     print(f'Saving snapshots data to: {filename}')
+        #     pickle.dump(simulation_info, open(filename, 'wb'))
+
+        # return simulation_info

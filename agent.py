@@ -2,138 +2,225 @@ import numpy as np
 
 from configuration import *
 
-################################################################################
-#       AGENT CLASS DEFINITION
-################################################################################
+
+def normpdf(x, sd):
+    return math.exp(-((x/sd)**2)/2) / (sd * math.sqrt(2*math.pi))
+
+
 class Agent:
-    def __init__(self, id: int, init_orientation: float, init_emotion: float, init_adjacency: np.array) -> None:
-        # Store needed values
+    def __init__(self, id: int, orientation: float, emotion: float, adjacency: np.array, media_conformity: float) -> None:
+        if VERBOSITY & V_AGENT:
+            print(
+                f'Initialising agent {id}:\torientation = {orientation:.3f}\temotion = {emotion:.3f}')
+        # Store arguments
         self.id = id
-        self.emotion = init_emotion
-        self.adjacency = init_adjacency
-        
-        
-        self.opinions = []
-        self.adjacency = []
-        self.second_adjacency = []
-        self.agents_trust = []
-        self.media_trust = []
-        self.media_conformity = []
-        self.emotion = 0
-        
-        
-        if VERBOSE:
-            print(f"Initialising agent {id}:\torientation = {init_orientation:.3f}\temotion = {init_emotion:.3f}")
-            
-        # Store relevant data
-        self.id = id
-        self.orientation = init_orientation
-        self.emotion = init_emotion
-        # Then initialise our opinion
-        self.initialise_opinions()
-        
-       
-    def initialise_opinions(self, orientation):
-        self.opinions = np.random.normal()
-        
-        
-    def update_orientation(self, policies_orientations, orientations_normal):
-        """
-        Updates the agent's orientation based on its opinions.
-        The agent's orientation is the root mean square of the agent's opinions multiplied by the orientation of each policy.
-        Some transformations are required to maintain the sign on the square, but the base principle is that the agent's opinion
-        on policies closer to neutral should have less effect on the agents opinion than its opinion in more tradical matters,
-        in a quadratic increase.
+        self.emotion = emotion
+        self.adjacency = adjacency
+        self.media_conformity = media_conformity
 
-        Args:
-            policies_orientations (array of floats): The orientation of all the policies the agent will have an opinion on
-        """
-        mean_squared = np.mean([np.square(self.opinions[i] * policies_orientations[i])*np.sign(self.opinions[i] * policies_orientations[i]) for i in range(len(policies_orientations))])
-        orientation = np.sqrt(np.abs(mean_squared)) * np.sign(mean_squared) / orientations_normal
-        if VERBOSE:
-            print(f"Updating agent {self.id} orientation:\t{self.orientation:.3f} -> {orientation:.3f}")
-        self.orientation = orientation
+        # Initialise opinions based on initial orientation and emotional affectiveness
+        # Agents that are more emotional about their opinions will have a narrower distribution
+        # around their orientation.
+        self.opinions = np.random.normal(
+            orientation, (1 - emotion)/5, POLICIES_COUNT)
+        self.opinions = np.clip(self.opinions, OPINION_MIN, OPINION_MAX)
 
-               
-    def get_angle(self, other_opinions):
-        """
+        # Initialise zero arrays that will be updated on each iteration
+        self.second_adjacency = np.zeros(AGENTS_COUNT)
+        self.agents_similarities = np.zeros(AGENTS_COUNT)
+        self.agents_trust = np.zeros(AGENTS_COUNT)
+        self.media_trust = np.zeros(MEDIA_OUTLETS_COUNT)
+        self.media_similarities = np.zeros(AGENTS_COUNT)
+
+    def print_state(self):
+        print('\n****************************************')
+        print(f'\nAgent {self.id}\n state:')
+        print(f'******************\nEmotion = {self.emotion}')
+        print(
+            f'******************\nMedia conformity = {self.media_conformity}')
+        print('******************\nAdjacency')
+        print_array(self.adjacency)
+        print('******************\nGroup Dissimilarities')
+        print_array(1 - self.agents_similarities)
+        print('******************\nGroup trust')
+        print_array(self.agents_trust)
+        print('******************\nMedia Dissimilarities')
+        print_array(1 - self.media_similarities)
+        print('******************\nMedia Trust')
+        print_array(self.media_trust)
+        print('\n****************************************')
+
+    def update_agents_similarities(self, group_opinions: np.ndarray):
+        # Clean the current array
+        self.agents_similarities = np.zeros(AGENTS_COUNT)
+        # Get the indexes of relevant opinions, we may need first or second
+        # degree adjacencies
+        connections_indexes = np.concatenate(
+            (self.adjacency.nonzero()[0], self.second_adjacency.nonzero()[0])
+        )
+        # Iterate in all connections, getting their directional similarity
+        for i in connections_indexes:
+            # Dissimilarity = 1 - similarity
+            self.agents_similarities[i] = self.get_directional_similarity(
+                group_opinions[i])
+        
+        
+                
+
+    def update_agents_trust(self, group_opinions: np.ndarray):
+        # Clean the current array
+        self.agents_trust = np.zeros(AGENTS_COUNT)
+        # Get the indexes of relevant opinions from the adjacency matrix
+        connections_indexes = self.adjacency.nonzero()[0]
+        # If we don't have any connections, keep the zeros
+        if len(connections_indexes) > 0:
+            # Variance of the trust distribution is based on emotion
+            # Agents with high emotional affectiveness on their opinon will tend to trust
+            # mostly agents that think similarly.
+            trust_variance = 1.05 - self.emotion
+            # Update similarity array
+            self.update_agents_similarities(group_opinions)
+            # Iterate in all connections storing the normal function for the dissimilarity
+            for i in connections_indexes:
+                # Dissimilarity = 1 - similarity
+                self.agents_trust[i] = normpdf(
+                    1 - self.agents_similarities[i], trust_variance)
+
+            # And finally normalise the trust
+            self.agents_trust = self.agents_trust / np.sum(self.agents_trust)
+
+    def update_media_similarities(self, media_opinions: np.ndarray):
+        # Clean the current array
+        self.media_similarities = np.zeros(MEDIA_OUTLETS_COUNT)
+        # Iterate in all connections, getting their directional similarity
+        for i in range(MEDIA_OUTLETS_COUNT):
+            # Dissimilarity = 1 - similarity
+            self.media_similarities[i] = self.get_directional_similarity(
+                media_opinions[i])
+
+    def update_media_trust(self, media_opinions: np.ndarray):
+        # Clean the current array
+        self.media_trust = np.zeros(MEDIA_OUTLETS_COUNT)
+        # Variance of the trust distribution is based on emotion like for agents
+        trust_variance = 1.05 - self.emotion
+        # Update similarity array
+        self.update_media_similarities(media_opinions)
+        # Iterate in all outlets storing the normal function for the dissimilarity
+        for i in range(MEDIA_OUTLETS_COUNT):
+            # Dissimilarity = 1 - similarity
+            self.media_trust[i] = normpdf(
+                1 - self.media_similarities[i], trust_variance)
+
+        # And finally normalise the trust
+        self.media_trust = self.media_trust / np.sum(self.media_trust)
+
+    def update_social_network(self):
+        # Initialise an array of potential connection breaks
+        end_connections = []
+        # Get first connections
+        connections_indexes = self.adjacency.nonzero()[0]
+        # Now check if any of the existing connections need undoing
+        for i in connections_indexes:
+            # The probability of endind an existing relationship is influenced
+            # by the dissimilarity and emotional affectiveness
+            end_prob = (1 - self.agents_similarities[i]) * self.emotion
+            add_end_prob(end_prob)
+            # Then we draw from that probability, and in case true we end 
+            # the adjacency and store the value to return so we end the adjacency 
+            # on the other agent as well
+            if np.random.choice([True, False], p=[end_prob, 1-end_prob]):
+                end_connections.append(i)
+        # Analogous behaviour for new connections
+        # Initialise an array of potential new connections
+        create_connections = []
+        # Get first connections
+        second_indexes = self.second_adjacency.nonzero()[0]
+        # Now check if any of the existing connections need undoing
+        for i in second_indexes:
+            # The probability of creating a new connection is proportional
+            # to similarity and the ratio of possible second degree connections 
+            # (-2 discounts the direct connection and the agent itself)
+            create_prob = self.agents_similarities[i] * self.second_adjacency[i]/(AGENTS_COUNT - 2)
+            add_create_prob(create_prob)
+            # Then we draw from that probability, and in case true we end 
+            # the adjacency and store the value to return so we end the adjacency 
+            # on the other agent as well
+            if np.random.choice([True, False], p=[create_prob, 1-create_prob]):
+                create_connections.append(i)
+    
+        # Now return the arrays so we can end/create the connection on the other involved agent
+        return create_connections, end_connections
+
+    def get_angle(self, ref_opinions):
+        '''
         Retrieves the angle between the agent's opinion array and the one in the other_opinons parameter.
         Angle calculated by the cosine of the dot product.
 
         Args:
-            other_opinions (array of floats): The reference array of opinions for the agent's angle to be calculated on
+            ref_opinions (array of floats): The reference array of opinions for the agent's angle to be calculated on
 
         Returns:
-            float: The angle in radians between the agent's opinion and the other_opinions parameter
-        """
-        cos = np.dot(self.opinions, other_opinions) / (np.linalg.norm(self.opinions) * np.linalg.norm(other_opinions))
+            float: The angle in radians between the agent's opinion and the ref_opinions parameter
+        '''
+        cos = np.dot(self.opinions, ref_opinions) / \
+            (np.linalg.norm(self.opinions) * np.linalg.norm(ref_opinions))
         cos = np.clip(cos, -1, 1)
         return np.arccos(cos)
-    
-    
-    def rotate_opinions(self, other_opinions, angle):
-        """
+
+    def get_directional_similarity(self, ref_opinions):
+        return 1 - (self.get_angle(ref_opinions) / np.pi)
+
+    def rotate_opinions(self, ref_opinions, angle):
+        '''
         Rotates the agent's opinion angle towards the other_opinons parameter by the angle parameter amount.
 
         Args:
-            other_opinions (array of floats): The reference array of opinions for the agent to rotate towards
+            ref_opinions (array of floats): The reference array of opinions for the agent to rotate towards
             angle (float): The rotation angle in radians
-        """
+        '''
         if np.abs(angle) < 1e-5:
-            if VERBOSE:
-                print(f"Rotation angle is too small ({angle}), ignoring...")
+            if VERBOSITY & V_AGENT:
+                print(f'Rotation angle is too small ({angle}), ignoring...')
             return
-             
+
         # Gram-Schmidt orthogonalization
         versor_self = self.opinions / np.linalg.norm(self.opinions)
-        axis = other_opinions - np.dot(versor_self, other_opinions) * versor_self
+        axis = ref_opinions - np.dot(versor_self, ref_opinions) * versor_self
         versor_axis = axis / np.linalg.norm(axis)
-        
+
         # Perform rotation
         I = np.identity(len(self.opinions))
-        R = I + ( np.outer(versor_axis, versor_self) - np.outer(versor_self,versor_axis) ) * np.sin(angle) + ( np.outer(versor_self, versor_self) + np.outer(versor_axis,versor_axis) ) * (np.cos(angle)-1)
+        R = I + (np.outer(versor_axis, versor_self) - np.outer(versor_self, versor_axis)) * np.sin(angle) + \
+            (np.outer(versor_self, versor_self) +
+             np.outer(versor_axis, versor_axis)) * (np.cos(angle)-1)
         self.opinions = np.matmul(R, self.opinions)
-        
+
         # Make sure we're still in range
         self.opinions = np.clip(self.opinions, OPINION_MIN, OPINION_MAX)
-        
-        
-    def interact(self, other_opinions):
-        """
+
+    def interact(self, ref_opinions):
+        '''
         Performs the agent's interaction with the other_opinons parameter.
-        The rotation angle is calculaated by attenuating the totaal angle between the agents by 
+        The rotation angle is calculaated by attenuating the totaal angle between the agents by
         a dissonance factor ang the agent's emotional attachment.
-        A rotation is there performed by the amount of the calculated rotation_angle towards other_opinions.
+        A rotation is there performed by the amount of the calculated rotation_angle towards ref_opinions.
 
         Args:
-            other_opinions (array of floats): The array of opinions for the agent to interact with.
-        """
+            ref_opinions (array of floats): The array of opinions for the agent to interact with.
+        '''
         # Get the relative angle
-        angle = self.get_angle(other_opinions)
+        angle = self.get_angle(ref_opinions)
         # Now calculate the dissonance factor and use it to modulate the rotation angle together with agent's emotion
         dissonance_factor = np.sin(2 * angle) / 2
-        rotation_angle = angle * dissonance_factor * (1 - self.emotion/2)
+        rotation_angle = angle * dissonance_factor
         # And do the job
-        if VERBOSE:
-            print(f"Interacting: angle = {np.degrees(angle):.2f}\tdissonance_factor = {dissonance_factor:.3f}\temotion = {self.emotion:.3f}\trotation_angle = {np.degrees(rotation_angle):.2f}")
-        self.rotate_opinions(other_opinions, rotation_angle)
-         
-            
-    def add_noise(self, noise_opinion, noise_intensity):
-        """
-        Adds a noise factor to the agent's opinion.
-        The rotation angle is attenuated by the noise intensity and the agent's emotion.
+        if VERBOSITY & V_AGENT:
+            print(
+                f'Interacting: angle = {np.degrees(angle):.2f}\tdissonance_factor = {dissonance_factor:.3f}\temotion = {self.emotion:.3f}\trotation_angle = {np.degrees(rotation_angle):.2f}')
+        self.rotate_opinions(ref_opinions, rotation_angle)
 
-        Args:
-            noise_opinion (array of floats): An array of opinion values for the noise
-            noise_intensity (float): The intensity factor of the noise to be applied
-        """
-        # Get the relative angle
-        angle = self.get_angle(noise_opinion)
-        # Modulate the roation angle with the noise intensity and the agent's emotion
-        rotation_angle = angle * noise_intensity * (1 - self.emotion)
-        # And do the job
-        self.rotate_opinions(noise_opinion, rotation_angle)
-        
-        if VERBOSE:
-            print(f"Adding noise: angle = {np.degrees(angle):.2f}\tnoise_intensity = {noise_intensity:.3f}\temotion = {self.emotion:.3f}\trotation_angle = {np.degrees(rotation_angle):.2f}")
+    def add_noise(self, noise):
+        # Just add the noise, it was already attenuated by emotions in the model scope
+        self.opinions += noise
+        # Make sure we're still in range
+        self.opinions = np.clip(self.opinions, OPINION_MIN, OPINION_MAX)
