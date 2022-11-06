@@ -7,23 +7,33 @@ import pathlib
 ############################################################################
 
 # Size
-POLICIES_COUNT = 2
-AGENTS_COUNT = 1000
-N_EPOCHS = 1
+POLICIES_COUNT = 3
+AGENTS_COUNT = 100
+N_EPOCHS = 1000
+
+# Tracing
+N_SNAPSHOTS = 251
+DATA_DIR = f'{pathlib.Path(__file__).parent.resolve()}/data/'
 
 # Agents initialisation
 INIT_CONNECTIONS_PROB = 0.1
 INIT_ORIENTATIONS_MEAN = 0
 INIT_ORIENTATIONS_STD = 0.4
-INIT_EMOTIONS_MEAN = 0.3
-INIT_EMOTIONS_STD = 0.1
-MEDIA_CONFORMITY_MEAN = 0.4
-MEDIA_CONFORMITY_STD = 0.1
+INIT_EMOTIONS_MEAN = 0.2
+INIT_EMOTIONS_STD = 0.05
+MEDIA_CONFORMITY_MEAN = 0.2
+MEDIA_CONFORMITY_STD = 0.05
 
 # Media parameters
 MEDIA_OUTLETS_COUNT = 2
 MEDIA_OUTLETS_MEANS = [-0.5, 0.5]
 MEDIA_OUTLETS_STD = [0.1, 0.1]
+
+# Candidates parameters
+CANDIDATES_COUNT = 2
+CANDIDATES_OPINIONS_MEAN = [-0.8, 0.8]
+CANDIDATES_OPINIONS_STD = [0.1, 0.1]
+
 # Noise
 NOISE_MEAN = 0
 NOISE_STD = 0.03
@@ -40,10 +50,7 @@ NOISE_MAX = 1
 MEDIA_CONFORMITY_MIN = 0
 MEDIA_CONFORMITY_MAX = 1
 
-# Tracing
-N_SNAPSHOTS = 101
-SAVE_RESULTS = False
-DATA_DIR = pathlib.Path(__file__).parent.resolve()
+
 
 V_AGENT = 1
 V_MODEL = 2
@@ -58,7 +65,7 @@ VERBOSITY = V_AGENT     * 0 + \
 
 
 # Random seed for consistency
-# np.random.seed(3)
+np.random.seed(0)
 
 
 ############################################################################

@@ -98,8 +98,6 @@ class Model:
         # Now update each agent's opinion by making it interact with the calculated
         # external influence. The opinions will also suffer some noise that represents
         # communication innacuracies.
-        if np.isnan(external_influence).any():
-            print("got a nan")
         for i in range(AGENTS_COUNT):
             self.agents[i].interact(external_influence[i])
             self.agents[i].add_noise(noise_influence[i])
@@ -111,7 +109,8 @@ class Model:
         #######################################################################
         #   2.  Social network update
         #######################################################################
-        # We first update the second adjacency matrix and arrays for each agent
+        # Update the adjacency matrices
+        self.refresh_adjacency_matrix()
         self.update_second_degree_adjacency()
         
         # Based on similarities with first and second degree connections, the
@@ -187,6 +186,15 @@ class Model:
             print('****************************************')
             print('*\tMedia trust refreshed:')
             print_array(self.media_trust)
+    
+    def refresh_adjacency_matrix(self):
+        self.adjacency_matrix = np.array(
+            [agent.adjacency for agent in self.agents]
+        )
+        if VERBOSITY & V_MODEL:
+            print('****************************************')
+            print('*\tAdjacency matrix refreshed:')
+            print_array(self.adjacency_matrix)
 
     def update_second_degree_adjacency(self):
         # Reset current state
@@ -209,6 +217,15 @@ class Model:
             # Then update at agent level
             self.agents[i].second_adjacency = self.second_adjacency[i]
 
+    def get_election_poll(self):
+        # Initialise a zero array
+        poll = np.zeros(CANDIDATES_COUNT)
+        # Sum the normalised intentions of all agents
+        for agent in self.agents:
+            poll += agent.get_vote_intention()
+        # Then normalise the sum
+        poll = poll / np.sum(poll)
+        return poll
 
     def get_pca_snapshot(self):
         opinions_list = [self.agents[i].opinions for i in range(self.n_agents)]
@@ -219,52 +236,34 @@ class Model:
 
     def run(self, n_epochs: int):
         snapshot_epochs = np.linspace(0, n_epochs, N_SNAPSHOTS).astype(int)
-        self.snapshots = []
+        data_snapshots = []
         print('\n********************************************************************************\n')
         print(f'Starting model run for {n_epochs} epochs.\n')
 
         # Start epoch from 0 so we save the initial state before stepping
-        for self.epoch in range(0, n_epochs + 1):
+        for epoch in range(0, n_epochs + 1):
             # Print status on each 10%
-            if self.epoch % (n_epochs / 10) == 0:
-                print(f'Run progress:\t{int(self.epoch/n_epochs * 100)}%')
+            if epoch % (n_epochs / 10) == 0:
+                print(f'Run progress:\t{int(epoch/n_epochs * 100)}%')
 
-            # # Store snapshots for plotting
-            # if epoch in snapshot_epochs:
-            #     pca_components, pca_variance = self.get_pca_snapshot()
-
-            #     self.snapshots.append({
-            #         'epoch': epoch,
-            #         'pca': pca_components,
-            #         'pca_variance': pca_variance,
-            #         'orientations': [self.agents[i].orientation for i in range(self.n_agents)],
-            #         'neg_ratio': np.sum([int(self.agents[i].orientation < 0) for i in range(self.n_agents)]) / self.n_agents * 100.0
-            #     })
+            # Store snapshots for plotting
+            if epoch in snapshot_epochs:
+                # pca_components, pca_variance = self.get_pca_snapshot()
+                poll = self.get_election_poll()
+                data_snapshots.append({
+                    'epoch': epoch,
+                    'group_opinions': self.group_opinions,
+                    'media_opinions': self.media_opinions,
+                    'adjacency': self.adjacency_matrix,
+                    'poll': poll
+                })
 
             # Step the model
             self.step()
 
-        # # Build the simulation info
-        # simulation_info = {
-        #     'n_agents': self.n_agents,
-        #     'n_policies': self.n_policies,
-        #     'n_epochs': n_epochs,
-        #     'policies_neg': self.policies_neg,
-        #     'policies_mean': self.policies_mean,
-        #     'policies_std': self.policies_std,
-        #     'interaction_ratio': interaction_ratio,
-        #     'emotions_mean': self.emotions_mean,
-        #     'emotions_std': self.emotions_std,
-        #     'noise_intensity_mean': self.noise_intensity_mean,
-        #     'noise_intensity_std': self.noise_intensity_std,
-        #     'snapshots': self.snapshots
-        # }
-        # # Save snaphsots to file
-        # if save_data:
-        #     timestamp = datetime.now().strftime('%m-%d-%H.%M')
-        #     filename = DATA_DIR + timestamp + \
-        #         f'-run-({self.n_agents}|{n_epochs}|{self.n_policies}|{self.policies_neg}|{self.policies_mean}|{self.policies_std}|{interaction_ratio}|{N_SNAPSHOTS}|{self.emotions_mean:.2f}|{self.emotions_std:.2f}|{self.noise_intensity_mean:.2f}|{self.noise_intensity_std:.2f}).dat'
-        #     print(f'Saving snapshots data to: {filename}')
-        #     pickle.dump(simulation_info, open(filename, 'wb'))
+        # Build the simulation info
+        simulation_info = {
+            'snapshots': data_snapshots
+        }
 
-        # return simulation_info
+        return simulation_info

@@ -4,9 +4,9 @@ import numpy as np
 from scipy.stats import norm
 
 
-import math
+import multiprocessing
 
-create_prob = 0.1
-for i in range(100):
-    if np.random.choice([True, False], p=[create_prob, 1-create_prob]):
-        print(np.random.choice([True, False], p=[create_prob, 1-create_prob]))
+a = [1]
+a.extend([2, 3])
+
+print(a)

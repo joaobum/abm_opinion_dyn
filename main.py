@@ -5,16 +5,25 @@ from model import Model
 from analysis import Analysis
 import time
 
+
 before = time.time()
-model = Model()
 
-model.run(N_EPOCHS)
+# model = Model()
+# simulation_info = model.run(N_EPOCHS)
 
-print(f'run time: {time.time() - before} s')
-print_create_prob()
-print_end_prob()
-print_creations()
-print_destructions()
+# analysis = Analysis(simulation_info=simulation_info)
+# analysis.plot_test()
+# analysis.save_to_file()
+analysis2 = Analysis(load_from_path='/Users/joaoreis/Documents/Study/Masters/Final_Project/abm_opinion_dyn/data/11-05-18.44-run-(20|100|3|26|0.30|0.10|0|0.03).dat')
+analysis2.plot_full_analysis()
+# plot_graph(graphs_list[0], data[0]['group_opinions'])
+
+
+# print(f'run time: {time.time() - before} s')
+# print_create_prob()
+# print_end_prob()
+# print_creations()
+# print_destructions()
 
     
     

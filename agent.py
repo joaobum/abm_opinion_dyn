@@ -63,9 +63,6 @@ class Agent:
             # Dissimilarity = 1 - similarity
             self.agents_similarities[i] = self.get_directional_similarity(
                 group_opinions[i])
-        
-        
-                
 
     def update_agents_trust(self, group_opinions: np.ndarray):
         # Clean the current array
@@ -125,8 +122,8 @@ class Agent:
             # by the dissimilarity and emotional affectiveness
             end_prob = (1 - self.agents_similarities[i]) * self.emotion
             add_end_prob(end_prob)
-            # Then we draw from that probability, and in case true we end 
-            # the adjacency and store the value to return so we end the adjacency 
+            # Then we draw from that probability, and in case true we end
+            # the adjacency and store the value to return so we end the adjacency
             # on the other agent as well
             if np.random.choice([True, False], p=[end_prob, 1-end_prob]):
                 end_connections.append(i)
@@ -138,16 +135,17 @@ class Agent:
         # Now check if any of the existing connections need undoing
         for i in second_indexes:
             # The probability of creating a new connection is proportional
-            # to similarity and the ratio of possible second degree connections 
+            # to similarity and the ratio of possible second degree connections
             # (-2 discounts the direct connection and the agent itself)
-            create_prob = self.agents_similarities[i] * self.second_adjacency[i]/(AGENTS_COUNT - 2)
+            create_prob = self.agents_similarities[i] * \
+                self.second_adjacency[i]/(AGENTS_COUNT - 2)
             add_create_prob(create_prob)
-            # Then we draw from that probability, and in case true we end 
-            # the adjacency and store the value to return so we end the adjacency 
+            # Then we draw from that probability, and in case true we end
+            # the adjacency and store the value to return so we end the adjacency
             # on the other agent as well
             if np.random.choice([True, False], p=[create_prob, 1-create_prob]):
                 create_connections.append(i)
-    
+
         # Now return the arrays so we can end/create the connection on the other involved agent
         return create_connections, end_connections
 
@@ -224,3 +222,21 @@ class Agent:
         self.opinions += noise
         # Make sure we're still in range
         self.opinions = np.clip(self.opinions, OPINION_MIN, OPINION_MAX)
+
+    def get_vote_intention(self):
+        # Get the similarity to each candidate's position
+        candidates_similarities = []
+        for i in range(CANDIDATES_COUNT):
+            # The randomness is due to each agent perceiving the candidate's opinion with
+            # some variation. 
+            perceived_position = np.random.normal(
+                CANDIDATES_OPINIONS_MEAN[i],
+                CANDIDATES_OPINIONS_STD[i],
+                POLICIES_COUNT
+            )
+            candidates_similarities.append(
+                self.get_directional_similarity(perceived_position))
+        # The vote probabilities is the opitinons similarities normalised
+        vote_intention = candidates_similarities / \
+            np.sum(candidates_similarities)
+        return vote_intention
