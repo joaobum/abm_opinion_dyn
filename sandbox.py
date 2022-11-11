@@ -6,7 +6,5 @@ from scipy.stats import norm
 
 import multiprocessing
 
-a = [1]
-a.extend([2, 3])
-
-print(a)
+a = np.array([1, 2, 3, 4])
+print(np.subtract(a, 2))

@@ -51,6 +51,11 @@ class Agent:
         print('\n****************************************')
 
     def update_agents_similarities(self, group_opinions: np.ndarray):
+        # # Do euclidean similarity
+        # mean_opinions = np.mean(group_opinions, axis=1)
+        # agent_mean = mean_opinions[self.id]
+        # self.agents_similarities = (2 - np.absolute(np.subtract(mean_opinions, agent_mean)))/2
+        
         # Clean the current array
         self.agents_similarities = np.zeros(AGENTS_COUNT)
         # Get the indexes of relevant opinions, we may need first or second
@@ -63,6 +68,8 @@ class Agent:
             # Dissimilarity = 1 - similarity
             self.agents_similarities[i] = self.get_directional_similarity(
                 group_opinions[i])
+        
+        # return None
 
     def update_agents_trust(self, group_opinions: np.ndarray):
         # Clean the current array
@@ -206,16 +213,18 @@ class Agent:
         Args:
             ref_opinions (array of floats): The array of opinions for the agent to interact with.
         '''
-        # Get the relative angle
-        angle = self.get_angle(ref_opinions)
-        # Now calculate the dissonance factor and use it to modulate the rotation angle together with agent's emotion
-        dissonance_factor = np.sin(2 * angle) / 2
-        rotation_angle = angle * dissonance_factor
-        # And do the job
-        if VERBOSITY & V_AGENT:
-            print(
-                f'Interacting: angle = {np.degrees(angle):.2f}\tdissonance_factor = {dissonance_factor:.3f}\temotion = {self.emotion:.3f}\trotation_angle = {np.degrees(rotation_angle):.2f}')
-        self.rotate_opinions(ref_opinions, rotation_angle)
+        # Check if there's any influence
+        if np.any(ref_opinions):
+            # Get the relative angle
+            angle = self.get_angle(ref_opinions)
+            # Now calculate the dissonance factor and use it to modulate the rotation angle together with agent's emotion
+            dissonance_factor = np.sin(2 * angle) / 2
+            rotation_angle = angle * dissonance_factor
+            # And do the job
+            if VERBOSITY & V_AGENT:
+                print(
+                    f'Interacting: angle = {np.degrees(angle):.2f}\tdissonance_factor = {dissonance_factor:.3f}\temotion = {self.emotion:.3f}\trotation_angle = {np.degrees(rotation_angle):.2f}')
+            self.rotate_opinions(ref_opinions, rotation_angle)
 
     def add_noise(self, noise):
         # Just add the noise, it was already attenuated by emotions in the model scope

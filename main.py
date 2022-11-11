@@ -6,16 +6,17 @@ from analysis import Analysis
 import time
 
 
-before = time.time()
+# before = time.time()
 
-# model = Model()
-# simulation_info = model.run(N_EPOCHS)
+model = Model()
+simulation_info = model.run(N_EPOCHS)
 
-# analysis = Analysis(simulation_info=simulation_info)
-# analysis.plot_test()
+analysis = Analysis(simulation_info=simulation_info)
 # analysis.save_to_file()
-analysis2 = Analysis(load_from_path='/Users/joaoreis/Documents/Study/Masters/Final_Project/abm_opinion_dyn/data/11-05-18.44-run-(20|100|3|26|0.30|0.10|0|0.03).dat')
-analysis2.plot_full_analysis()
+analysis.plot_full_analysis()
+
+# analysis2 = Analysis(load_from_path='/Users/joaoreis/Documents/Study/Masters/Final_Project/abm_opinion_dyn/data/11-07-01.07-run-(200|2000|3|501|0.25|0.05|0|0.03).dat')
+# analysis2.plot_full_analysis()
 # plot_graph(graphs_list[0], data[0]['group_opinions'])
 
 

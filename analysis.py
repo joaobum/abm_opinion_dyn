@@ -23,15 +23,26 @@ class Analysis:
             [snapshot['epoch'] for snapshot in self.snapshots]
         )
 
-        # Store group opinions and metrics
+        # Unpack group opinions and get metrics
         self.opinions = np.array(
             [snapshot['group_opinions'] for snapshot in self.snapshots]
         )
+        self.mean_opinions = np.array(
+            [np.mean(opinions) for opinions in self.opinions]
+        )
+        self.max_mean_opinions = np.max(self.mean_opinions)
+        self.min_mean_opinions = np.min(self.mean_opinions)
+        self.n_agents = len(self.opinions[0])
+    
+        # Unpack polls and get metrics 
         self.vote_polls = np.array(
             [snapshot['poll'] for snapshot in self.snapshots]
         )
+        self.max_vote_prob = np.max(self.vote_polls)
+        self.min_vote_prob = np.min(self.vote_polls)
+        
 
-        # Store graphs and metrics
+        # Get graphs and metrics
         self.graphs = [
             nx.from_numpy_matrix(self.snapshots[i]['adjacency'])
             for i in range(self.n_snapshots)
@@ -41,6 +52,8 @@ class Analysis:
         )
         self.max_density = np.max(self.graphs_densities)
         self.max_degree = 0
+        self.max_degree_count = 0
+        self.get_max_degree()
 
     def save_to_file(self):
         # Save snaphsots to file
@@ -75,9 +88,10 @@ class Analysis:
 
         edge_trace = go.Scatter3d(
             x=edge_x, y=edge_y, z=edge_z,
-            line=dict(width=0.5, color='#888'),
+            line=dict(width=0.3, color='#888'),
             hoverinfo='none',
-            mode='lines'
+            mode='lines',
+            showlegend=False
         )
 
         node_trace = go.Scatter3d(
@@ -89,7 +103,7 @@ class Analysis:
                 colorscale='YlGnBu',
                 reversescale=False,
                 color=[],
-                size=10,
+                size=3,
                 # colorbar=dict(
                 #     thickness=15,
                 #     title='Node Connections',
@@ -97,7 +111,8 @@ class Analysis:
                 #     titleside='right'
                 # ),
                 line_width=2
-            )
+            ),
+            showlegend=False
         )
 
         node_adjacencies = []
@@ -111,19 +126,44 @@ class Analysis:
 
         return [edge_trace, node_trace]
 
+    def get_max_degree(self):
+        for graph in self.graphs:
+            histogram = nx.degree_histogram(graph)
+            if len(histogram) - 1 > self.max_degree:
+                self.max_degree = len(histogram) - 1
+            if np.max(histogram) > self.max_degree_count:
+                self.max_degree_count = np.max(histogram) 
+
     def get_graph_histogram_trace(self, step=0):
         graph = self.graphs[step]
         histogram = nx.degree_histogram(graph)
-        histogram_trace = go.Histogram(x=histogram)
-        if np.max(histogram) > self.max_degree:
-            self.max_degree = np.max(histogram)
+        converted_histogram = []
+        for degree in range(len(histogram)):
+            degree_count = histogram[degree]
+            converted_histogram.extend([degree for i in range(degree_count)])
+            
+        histogram_trace = go.Histogram(
+            x=converted_histogram,
+            histnorm='percent',
+            showlegend=False,
+            xbins={
+                'start': 0,
+                'end': self.max_degree,
+                'size': 1
+            }
+        )
+
         return [histogram_trace]
 
     def get_graph_density_traces(self, step=0):
         density_trace = go.Scatter(
             x=self.epochs,
             y=self.graphs_densities,
-            mode='lines'
+            mode='lines',
+            line={
+                'color': 'black'
+            },
+            showlegend=False
         )
         epoch_reference = go.Scatter(
             x=[self.epochs[step], self.epochs[step]],
@@ -132,7 +172,8 @@ class Analysis:
             line={
                 'color': 'grey',
                 'dash': 'dash'
-            }
+            },
+            showlegend=False
         )
 
         return [density_trace, epoch_reference]
@@ -156,70 +197,94 @@ class Analysis:
             line={
                 'color': 'grey',
                 'dash': 'dash'
-            }
+            },
+            showlegend=False
         )
         candidates_traces.append(epoch_reference)
         return candidates_traces
 
     def get_mean_opinions_traces(self, step=0):
-        mean_opinions_array = np.array(
-            [np.mean(opinions) for opinions in self.opinions]
-        )
+        
         mean_opinions_trace = go.Scatter(
-            x=self.epochs, y=mean_opinions_array, mode='lines')
+            x=self.epochs,
+            y=self.mean_opinions,
+            mode='lines',
+            line={
+                'color': 'black'
+            },
+            showlegend=False
+        )
         return [mean_opinions_trace]
 
     def plot_full_analysis(self):
         fig = make_subplots(
             rows=2, cols=2,
-            specs=[[{'type': 'surface'}, {'type': 'xy'}],
-                   [{'type': 'xy'}, {'type': 'xy'}]]
+            specs=[[{'is_3d': True}, {'type': 'xy'}],
+                   [{'type': 'bar'}, {'type': 'xy', 'secondary_y': True}]]
         )
 
-        # Set up menus
-
+        # For complex figures with custom rations and axes,
+        # layout must be set in low-level
         layout = dict(
+            scene={
+                'xaxis': {
+                    'title': 'Policy 1',
+                    'range': [-1, 1]
+                },
+                'yaxis': {
+                    'title': 'Policy 2',
+                    'range': [-1, 1]
+                },
+                'zaxis': {
+                    'title': 'Policy 3',
+                    'range': [-1, 1]
+                },
+                'domain_x': [0, 0.5],
+                'domain_y': [0, 1]
+            },
+            scene_aspectmode='cube',
             xaxis1={
-                # 'domain': [0.0, 0.45],
+                'domain': [0.6, 0.95],
                 'anchor': 'y1',
-                'title': 'Epoch',
-                'range': [0, self.epochs[-1]]
+                'range': [0, self.epochs[-1]],
+                'title': 'Epoch'
             },
             yaxis1={
+                'domain': [0.4, 0.69],
                 'anchor': 'x1',
                 'title': 'Graph Density',
-                'range': [0, 1]
+                'range': [0, self.max_density + 0.2]
             },
             xaxis2={
-                # 'domain': [0.55, 1.0],
+                'domain': [0.6, 0.95],
                 'anchor': 'y2',
                 'title': 'Node Degree',
-                'range': [0, 20]
+                'range': [0, self.max_degree]
             },
             yaxis2={
-                # 'domain': [0.58, 0.98],
+                'domain': [0.0, 0.3],
                 'anchor': 'x2',
-                'title': 'Count',
-                'range': [0, 20]
+                'title': 'Ratio [%]',
+                'range': [0, self.max_degree_count/self.n_agents * 100 + 10]
             },
             xaxis3={
-                # 'domain': [0.0, 0.42],
+                'domain': [0.6, 0.95],
                 'anchor': 'y3',
                 'title': 'Epoch',
-                'range': [0, self.epochs[-1]]
+                'range': [0, self.epochs[-1]],
+                'visible': False
             },
             yaxis3={
-                # 'domain': [0.0, 0.40],
+                'domain': [0.71, 1.0],
                 'anchor': 'x3',
-                'title': 'Vote probability %',
-                'range': [0, 100]
+                'title': 'Vote probability [%]',
+                'range': [self.min_vote_prob*100*0.9, self.max_vote_prob*100*1.1]
             },
-            yaxis6={
-                # 'domain': [0.0, 0.42],
+            yaxis4={
                 'anchor': 'x3',
                 'overlaying': 'y3',
                 'title': 'Mean opinion',
-                'range': [0, 1],
+                'range': [self.min_mean_opinions*0.9, self.max_mean_opinions*1.1],
                 'side': 'right'
             },
             margin={
@@ -304,7 +369,7 @@ class Analysis:
                                 'frame': {
                                     'duration': 500.0,
                                     'easing': 'linear',
-                                    'redraw': False
+                                    'redraw': True
                                 },
                                 'transition': {
                                     'duration': 0,
@@ -324,11 +389,11 @@ class Analysis:
         plot_rows = [1, 1, 2, 1, 1, 2, 2, 2, 2]
         plot_cols = [1, 1, 1, 2, 2, 2, 2, 2, 2]
         secondary_ys = [False, False, False, False,
-                        False, False, False, False, False]
+                        False, False, False, False, True]
         fig.add_traces((self.get_graph_network_traces() +
                         self.get_graph_histogram_trace() +
                         self.get_graph_density_traces() +
-                        self.get_vote_polls_traces() + 
+                        self.get_vote_polls_traces() +
                         self.get_mean_opinions_traces()),
                        rows=plot_rows,
                        cols=plot_cols,
@@ -351,521 +416,3 @@ class Analysis:
         fig.update_layout(layout)
         fig.update(frames=frames)
         fig.show()
-
-# def plot_full_analysis(simulation_info):
-#     '''
-#     Generate an animated plot over epochs with 4 subplots: a 2-PCA analysis, the population orientation as a
-#     scatter and histogram, and a timeline of agents orientation majority.
-#     '''
-#     snapshots_df=pd.DataFrame(simulation_info)
-#     epochs=snapshots_df.epoch.unique()
-
-#     # Generate the dataframe for the graph edges
-#     for index, row in snapshots_df.iterrows():
-#         graph=nx.from_numpy_array(row.adjacency)
-#         edges_x=[]
-#         edges_y=[]
-#         edges_z=[]
-#         for edge in graph.edges():
-#             x0, y0, z0=row.group_opinions[edge[0]]
-#             x1, y1, z1=row.group_opinions[edge[1]]
-#             edges_x.append(x0)
-#             edges_x.append(x1)
-#             edges_x.append(None)
-#             edges_y.append(y0)
-#             edges_y.append(y1)
-#             edges_y.append(None)
-#             edges_z.append(z0)
-#             edges_z.append(z1)
-#             edges_z.append(None)
-
-#         snapshots_df.at[index, 'edges_x']=np.array(edges_x)
-#         snapshots_df.at[index, 'edges_y']=np.array(edges_y)
-#         snapshots_df.at[index, 'edges_z']=np.array(edges_z)
-
-#     graph_df=snapshots_df[['epoch', 'edges_x', 'edges_y', 'edges_z']].explode(
-#         ['edges_x', 'edges_y', 'edges_z'])
-
-#     opinions_df=snapshots_df[['epoch', 'group_opinions']]
-
-#     # pca_df = snapshots_df.explode('pca')
-#     # pca_df[['pca1', 'pca2']] = pd.DataFrame(
-#     #     pca_df.pca.tolist(), index=pca_df.index)
-
-#     # histogram_df = pd.DataFrame(
-#     #     columns=['epoch', 'histogram_x', 'histogram_y'])
-#     # for index, row in snapshots_df.iterrows():
-#     #     histogram = np.histogram(
-#     #         row.orientations, 200, range=(-1, 1), density=True)
-#     #     for i in range(len(histogram[0])):
-#     #         histogram_df = pd.concat([
-#     #             histogram_df,
-#     #             pd.DataFrame(
-#     #                 {'epoch': row.epoch, 'histogram_x': histogram[1][i], 'histogram_y': histogram[0][i]}, index=[0])
-#     #         ], ignore_index=True)
-
-#     # orientations_df = snapshots_df.explode('orientations').reset_index()
-#     # orientations_df['agent_id'] = pd.DataFrame(
-#     #     [i % self.n_agents for i in range(len(orientations_df))])
-#     fig=make_subplots(rows = 1, cols = 1,
-#                         specs = [[{'type': 'scene'}]])
-
-#     fig.update_layout(dict(
-#             width=1200,
-#             height=900,
-#             title='analysis',
-#             # title=f'Analysis over {self.n_epochs} epochs: {self.n_agents} agents, {self.n_policies} policies (neg={self.policies_neg}, μ={self.policies_mean}|σ={self.policies_std}), ' +
-#             # f'emotions (μ={self.emotions_mean},σ={self.emotions_std}), noise (μ={self.noise_intensity_mean}, σ={self.noise_intensity_std})',
-#             xaxis1={
-#                 'domain': [0.0, 0.45],
-#                 'anchor': 'y1',
-#                 'title': 'policy 1'
-#             },
-#             yaxis1={
-#                 'domain': [0.58, 0.98],
-#                 'anchor': 'x1',
-#                 'title': 'policy 2'
-#             },
-#             xaxis2={
-#                 'domain': [0.55, 1.0],
-#                 'anchor': 'y2',
-#                 'title': 'orientation interval',
-#                 'range': [-1, 1]
-#             },
-#             yaxis2={
-#                 'domain': [0.58, 0.98],
-#                 'anchor': 'x2',
-#                 'title': 'ratio',
-#                 'range': [0, 5]
-#             },
-#             xaxis3={
-#                 'domain': [0.0, 0.42],
-#                 'anchor': 'y3',
-#                 'title': 'agent id',
-#                 'range': [0, AGENTS_COUNT]
-#             },
-#             yaxis3={
-#                 'domain': [0.0, 0.40],
-#                 'anchor': 'x3',
-#                 'title': 'orientation',
-#                 'range': [-1, 1]
-#             },
-#             xaxis4={
-#                 'domain': [0.55, 1.0],
-#                 'anchor': 'y4',
-#                 'title': 'epoch',
-#                 'range': [0, N_EPOCHS]
-#             },
-#             yaxis4={
-#                 'domain': [0.0, 0.42],
-#                 'anchor': 'x4',
-#                 'title': '% negative oriented',
-#                 'range': [0, 100]
-#             },
-#             margin={
-#                 't': 50,
-#                 'b': 50,
-#                 'l': 50,
-#                 'r': 50
-#             },
-#             updatemenus=[
-#                 {
-#                     'buttons': [
-#                         {
-#                             'args': [
-#                                 [str(epoch) for epoch in epochs],
-#                                 {
-#                                     'frame': {
-#                                         'duration': 500.0,
-#                                         'redraw': False
-#                                     },
-#                                     'fromcurrent': True,
-#                                     'transition': {
-#                                         'duration': 500,
-#                                         'easing': 'linear'
-#                                     }
-#                                 }
-#                             ],
-#                             'label': 'Play',
-#                             'method': 'animate'
-#                         },
-#                         {
-#                             'args': [
-#                                 [None],
-#                                 {
-#                                     'frame': {
-#                                         'duration': 0,
-#                                         'redraw': False
-#                                     },
-#                                     'mode': 'immediate',
-#                                     'transition': {
-#                                         'duration': 0
-#                                     }
-#                                 }
-#                             ],
-#                             'label': 'Pause',
-#                             'method': 'animate'
-#                         }
-#                     ],
-#                     'direction': 'left',
-#                     'pad': {
-#                         'r': 10,
-#                         't': 85
-#                     },
-#                     'showactive': True,
-#                     'type': 'buttons',
-#                     'x': 0.1,
-#                     'y': 0,
-#                     'xanchor': 'right',
-#                     'yanchor': 'top'
-#                 }
-#             ],
-#             sliders=[
-#                 {
-#                     'yanchor': 'top',
-#                     'xanchor': 'left',
-#                     'currentvalue': {
-#                         'font': {
-#                             'size': 16
-#                         },
-#                         'prefix': 'Epoch: ',
-#                         'visible': True,
-#                         'xanchor': 'right'
-#                     },
-#                     'transition': {
-#                         'duration': 500.0,
-#                         'easing': 'linear'
-#                     },
-#                     'pad': {
-#                         'b': 10,
-#                         't': 50
-#                     },
-#                     'len': 0.9,
-#                     'x': 0.1,
-#                     'y': 0,
-#                     'steps': [
-#                         {
-#                             'args': [
-#                                 [str(epoch)],
-#                                 {
-#                                     'frame': {
-#                                         'duration': 500.0,
-#                                         'easing': 'linear',
-#                                         'redraw': False
-#                                     },
-#                                     'transition': {
-#                                         'duration': 0,
-#                                         'easing': 'linear'
-#                                     }
-#                                 }
-#                             ],
-#                             'label': str(epoch),
-#                             'method': 'animate'
-#                         }
-#                         for epoch in epochs
-#                     ]
-#                 }],
-#             # annotations=[
-#             #     {
-#             #         'font': {
-#             #             'size': 16
-#             #         },
-#             #         'showarrow': False,
-#             #         'text': 'Social network distributed on opinions',
-#             #         'x': 0.225,
-#             #         'xanchor': 'center',
-#             #         'xref': 'paper',
-#             #         'y': 0.98,
-#             #         'yanchor': 'bottom',
-#             #         'yref': 'paper'
-#             #     },
-#             #     {
-#             #         'font': {
-#             #             'size': 16
-#             #         },
-#             #         'showarrow': False,
-#             #         'text': "Agent's orientation histogram",
-#             #         'x': 0.775,
-#             #         'xanchor': 'center',
-#             #         'xref': 'paper',
-#             #         'y': 0.98,
-#             #         'yanchor': 'bottom',
-#             #         'yref': 'paper'
-#             #     },
-#             #     {
-#             #         'font': {
-#             #             'size': 16
-#             #         },
-#             #         'showarrow': False,
-#             #         'text': 'Orientation per agent',
-#             #         'x': 0.225,
-#             #         'xanchor': 'center',
-#             #         'xref': 'paper',
-#             #         'y': 0.45,
-#             #         'yanchor': 'bottom',
-#             #         'yref': 'paper'
-#             #     },
-#             #     {
-#             #         'font': {
-#             #             'size': 16
-#             #         },
-#             #         'showarrow': False,
-#             #         'text': 'Ratio of negative orientation agents',
-#             #         'x': 0.775,
-#             #         'xanchor': 'center',
-#             #         'xref': 'paper',
-#             #         'y': 0.45,
-#             #         'yanchor': 'bottom',
-#             #         'yref': 'paper'
-#             #     }
-#             # ],
-#         ))
-
-#     # We need to build the figure by hand to have subplots sharing an animation
-
-
-#         data=[
-#             {
-#                 'type': 'scatter3d',
-#                 'name': 'Social network',
-#                 'x': graph_df.loc[graph_df['epoch'] == epochs[0]]['edges_x'],
-#                 'y': graph_df.loc[graph_df['epoch'] == epochs[0]]['edges_y'],
-#                 'z': graph_df.loc[graph_df['epoch'] == epochs[0]]['edges_z'],
-#                 'line': {
-#                     'color': 'indigo'
-#                 },
-#                 'mode': 'lines',
-#                 'showlegend': False,
-#                 'xaxis': 'x1',
-#                 'yaxis': 'y1',
-#                 'zaxis': 'z1'
-#             },
-#             {
-#                 'type': 'bar',
-#                 'name': 'Orientations histogram',
-#                 'x': histogram_df.loc[histogram_df['epoch'] == epochs[0]]['histogram_x'],
-#                 'y': histogram_df.loc[histogram_df['epoch'] == epochs[0]]['histogram_y'],
-#                 'showlegend': False,
-#                 'xaxis': 'x2',
-#                 'yaxis': 'y2'
-#             },
-#             {
-#                 'type': 'scatter',
-#                 'name': 'Orientations',
-#                 'x': orientations_df.loc[orientations_df['epoch'] == epochs[0]]['agent_id'],
-#                 'y': orientations_df.loc[orientations_df['epoch'] == epochs[0]]['orientations'],
-#                 'line': {
-#                     'color': 'teal'
-#                 },
-#                 'mode':
-#                     'markers',
-#                     'showlegend': False,
-#                     'xaxis': 'x3',
-#                     'yaxis': 'y3'
-#             },
-#             {
-#                 'type': 'scatter',
-#                 'name': 'Negative ratio',
-#                 'x': snapshots_df['epoch'],
-#                 'y': snapshots_df['neg_ratio'],
-#                 'line': {
-#                     'color': 'black'
-#                 },
-#                 'mode': 'lines',
-#                 'showlegend': False,
-#                 'xaxis': 'x4',
-#                 'yaxis': 'y4'
-#             },
-#             {
-#                 'type': 'scatter',
-#                 'name': 'Negative ratio',
-#                 'x': snapshots_df['epoch'],
-#                 'y': [50 for epoch in epochs],
-#                 'line': {
-#                     'color': 'darkgreen',
-#                     'dash': 'dot'
-#                 },
-#                 'mode': 'lines',
-#                 'showlegend': False,
-#                 'xaxis': 'x4',
-#                 'yaxis': 'y4'
-#             },
-#             {
-#                 'type': 'scatter',
-#                 'name': 'Negative ratio',
-#                 'x': [0 for i in range(0, 100)],
-#                 'y': [y for y in range(0, 100)],
-#                 'line': {
-#                     'color': 'red'
-#                 },
-#                 'mode': 'lines',
-#                 'showlegend': False,
-#                 'xaxis': 'x4',
-#                 'yaxis': 'y4'
-#             },
-#         ],
-
-#         frames=[
-#             {
-#                 'name': str(epoch), 'layout': {},
-#                 'data': [
-#                     {
-#                         'type': 'scatter3d',
-#                         'name': 'Social network',
-#                         'x': graph_df.loc[graph_df['epoch'] == epoch]['edges_x'],
-#                         'y': graph_df.loc[graph_df['epoch'] == epoch]['edges_y'],
-#                         'z': graph_df.loc[graph_df['epoch'] == epoch]['edges_z'],
-#                         'line': {
-#                             'color': 'indigo'
-#                         },
-#                         'mode': 'lines',
-#                         'showlegend': False,
-#                         'xaxis': 'x1',
-#                         'yaxis': 'y1'
-#                     },
-#                     # {
-#                     #     'type': 'bar',
-#                     #     'name': 'Orientations histogram',
-#                     #     'x': histogram_df.loc[histogram_df['epoch'] == epoch]['histogram_x'],
-#                     #     'y': histogram_df.loc[histogram_df['epoch'] == epoch]['histogram_y'],
-#                     #     'showlegend': False,
-#                     #     'xaxis': 'x2',
-#                     #     'yaxis': 'y2'
-#                     # },
-#                     # {
-#                     #     'type': 'scatter',
-#                     #     'name': 'Orientations',
-#                     #     'x': orientations_df.loc[orientations_df['epoch'] == epoch]['agent_id'],
-#                     #     'y': orientations_df.loc[orientations_df['epoch'] == epoch]['orientations'],
-#                     #     'line': {
-#                     #         'color': 'teal'
-#                     #     },
-#                     #     'mode': 'markers',
-#                     #     'showlegend': False,
-#                     #     'xaxis': 'x3',
-#                     #     'yaxis': 'y3'
-#                     # },
-#                     # {
-#                     #     'type': 'scatter',
-#                     #     'name': 'Negative ratio',
-#                     #     'x': snapshots_df['epoch'],
-#                     #     'y': snapshots_df['neg_ratio'],
-#                     #     'line': {
-#                     #         'color': 'black'
-#                     #     },
-#                     #     'mode': 'lines',
-#                     #     'showlegend': False,
-#                     #     'xaxis': 'x4',
-#                     #     'yaxis': 'y4'
-#                     # },
-#                     # {
-#                     #     'type': 'scatter',
-#                     #     'name': 'Negative ratio',
-#                     #     'x': snapshots_df['epoch'],
-#                     #     'y': [50 for epoch in epochs],
-#                     #     'line': {
-#                     #         'color': 'darkgreen',
-#                     #         'dash': 'dot'
-#                     #     },
-#                     #     'mode': 'lines',
-#                     #     'showlegend': False,
-#                     #     'xaxis': 'x4',
-#                     #     'yaxis': 'y4'
-#                     # },
-#                     # {
-#                     #     'type': 'scatter',
-#                     #     'name': 'Negative ratio',
-#                     #     'x': [epoch for i in range(0, 100)],
-#                     #     'y': [y for y in range(0, 100)],
-#                     #     'line': {
-#                     #         'color': 'red'
-#                     #     },
-#                     #     'mode': 'lines',
-#                     #     'showlegend': False,
-#                     #     'xaxis': 'x4',
-#                     #     'yaxis': 'y4'
-#                     # },
-#                 ],
-
-#             }
-#             for epoch in epochs
-#         ]
-#     # )
-#     # fig = go.Figure(fig)
-#     # fig.add_trace(
-#     #     go.Scatter3d(
-#     #         x=graph_df.loc[graph_df['epoch'] == epochs[0]]['edges_x'],
-#     #         y=graph_df.loc[graph_df['epoch'] == epochs[0]]['edges_y'],
-#     #         z=graph_df.loc[graph_df['epoch'] == epochs[0]]['edges_z'],
-#     #         mode='lines',
-#     #         marker=dict(color="red")
-#     #     ), row=1, col=1)
-#     # frames = [go.Frame(
-#     #     dict(
-#     #         name=str(epoch),
-#     #         data=[
-#     #             go.Scatter3d(
-#     #                 x=graph_df.loc[graph_df['epoch'] == epoch]['edges_x'],
-#     #                 y=graph_df.loc[graph_df['epoch'] == epoch]['edges_y'],
-#     #                 z=graph_df.loc[graph_df['epoch'] == epoch]['edges_z'],
-#     #                 mode='lines',
-#     #                 marker=dict(color="red")
-#     #             )
-#     #         ],
-#     #         traces=[0])
-#     # ) for epoch in epochs]
-#     # fig.add_trace(
-#     #     go.Scatter3d(
-#     #         x=snapshots_df.loc[snapshots_df['epoch'] == epochs[0]]['group_opinions'][0][:, 0],
-#     #         y=snapshots_df.loc[snapshots_df['epoch'] == epochs[0]]['group_opinions'][0][:, 1],
-#     #         z=snapshots_df.loc[snapshots_df['epoch'] == epochs[0]]['group_opinions'][0][:, 2],
-#     #         mode='markers',
-#     #         marker=dict(color="blue")
-#     #     ), row=1, col=1)
-#     # frames = [go.Frame(
-#     #     dict(
-#     #         name=str(epochs[i]),
-#     #         data=[
-#     #             go.Scatter3d(
-#     #                 x=snapshots_df.loc[snapshots_df['epoch'] == epochs[i]]['group_opinions'][i][:, 0],
-#     #                 y=snapshots_df.loc[snapshots_df['epoch'] == epochs[i]]['group_opinions'][i][:, 1],
-#     #                 z=snapshots_df.loc[snapshots_df['epoch'] == epochs[i]]['group_opinions'][i][:, 2],
-#     #                 mode='markers',
-#     #                 marker=dict(color="blue")
-#     #             )
-#     #         ],
-#     #         traces=[0])
-#     # ) for i in range(len(epochs))]
-#     # fig.update(frames=frames)
-
-#     # # print(fig.frames[0].data)
-#     # # print(fig.frames[1].data)
-#     # # print(fig.frames[2].data)
-
-#     # # fig.show()
-
-#     # fig = go.Figure(
-#     #     data=[go.Scatter3d(x=[0, 1], y=[0, 1], z=[0,1])],
-#     #     layout=go.Layout(
-#     #         scene=dict(
-#     #             xaxis=dict(range=[-1, 1], autorange=False),
-#     #             yaxis=dict(range=[-1, 1], autorange=False),
-#     #             zaxis=dict(range=[-1, 1], autorange=False),
-#     #         ),
-#     #         width=500,
-#     #         height=500,
-#     #         updatemenus=[dict(
-#     #             type="buttons",
-#     #             buttons=[dict(label="Play",
-#     #                         method="animate",
-#     #                         args=[None])])]
-
-#     #     ),
-#     #     frames=[go.Frame(data=[go.Scatter3d(x=snapshots_df.loc[snapshots_df['epoch'] == epochs[i]]['group_opinions'][i][:, 0],
-#     #                 y=snapshots_df.loc[snapshots_df['epoch'] == epochs[i]]['group_opinions'][i][:, 1],
-#     #                 z=snapshots_df.loc[snapshots_df['epoch'] == epochs[i]]['group_opinions'][i][:, 2])])
-#     #             for i in range(len(epochs))
-#     #     ]
-#     # )
-
-#     fig.show()

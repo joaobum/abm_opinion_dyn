@@ -252,9 +252,9 @@ class Model:
                 poll = self.get_election_poll()
                 data_snapshots.append({
                     'epoch': epoch,
-                    'group_opinions': self.group_opinions,
-                    'media_opinions': self.media_opinions,
-                    'adjacency': self.adjacency_matrix,
+                    'group_opinions': self.group_opinions.copy(),
+                    'media_opinions': self.media_opinions.copy(),
+                    'adjacency': self.adjacency_matrix.copy(),
                     'poll': poll
                 })
 
