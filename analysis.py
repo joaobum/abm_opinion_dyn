@@ -215,6 +215,13 @@ class Analysis:
             showlegend=False
         )
         return [mean_opinions_trace]
+    
+    def get_pca_snapshot(self):
+        opinions_list = [self.agents[i].opinions for i in range(self.n_agents)]
+        opinion_array = np.array(opinions_list)
+        pca = PCA(n_components=2, random_state=0, svd_solver='full')
+        components = pca.fit_transform(opinion_array)
+        return components, pca.explained_variance_ratio_
 
     def plot_full_analysis(self):
         fig = make_subplots(

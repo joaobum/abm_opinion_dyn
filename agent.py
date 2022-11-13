@@ -49,29 +49,9 @@ class Agent:
         print('******************\nMedia Trust')
         print_array(self.media_trust)
         print('\n****************************************')
-
-    def update_agents_similarities(self, group_opinions: np.ndarray):
-        # # Do euclidean similarity
-        # mean_opinions = np.mean(group_opinions, axis=1)
-        # agent_mean = mean_opinions[self.id]
-        # self.agents_similarities = (2 - np.absolute(np.subtract(mean_opinions, agent_mean)))/2
         
-        # Clean the current array
-        self.agents_similarities = np.zeros(AGENTS_COUNT)
-        # Get the indexes of relevant opinions, we may need first or second
-        # degree adjacencies
-        connections_indexes = np.concatenate(
-            (self.adjacency.nonzero()[0], self.second_adjacency.nonzero()[0])
-        )
-        # Iterate in all connections, getting their directional similarity
-        for i in connections_indexes:
-            # Dissimilarity = 1 - similarity
-            self.agents_similarities[i] = self.get_directional_similarity(
-                group_opinions[i])
-        
-        # return None
 
-    def update_agents_trust(self, group_opinions: np.ndarray):
+    def update_agents_trust(self, group_similarities: np.ndarray):
         # Clean the current array
         self.agents_trust = np.zeros(AGENTS_COUNT)
         # Get the indexes of relevant opinions from the adjacency matrix
@@ -82,13 +62,11 @@ class Agent:
             # Agents with high emotional affectiveness on their opinon will tend to trust
             # mostly agents that think similarly.
             trust_variance = 1.05 - self.emotion
-            # Update similarity array
-            self.update_agents_similarities(group_opinions)
             # Iterate in all connections storing the normal function for the dissimilarity
             for i in connections_indexes:
                 # Dissimilarity = 1 - similarity
                 self.agents_trust[i] = normpdf(
-                    1 - self.agents_similarities[i], trust_variance)
+                    1 - group_similarities[self.id][i], trust_variance)
 
             # And finally normalise the trust
             self.agents_trust = self.agents_trust / np.sum(self.agents_trust)
@@ -118,7 +96,7 @@ class Agent:
         # And finally normalise the trust
         self.media_trust = self.media_trust / np.sum(self.media_trust)
 
-    def update_social_network(self):
+    def update_social_network(self, group_similarities: np.ndarray):
         # Initialise an array of potential connection breaks
         end_connections = []
         # Get first connections
@@ -127,7 +105,7 @@ class Agent:
         for i in connections_indexes:
             # The probability of endind an existing relationship is influenced
             # by the dissimilarity and emotional affectiveness
-            end_prob = (1 - self.agents_similarities[i]) * self.emotion
+            end_prob = (1 - group_similarities[self.id][i]) * self.emotion / 10
             add_end_prob(end_prob)
             # Then we draw from that probability, and in case true we end
             # the adjacency and store the value to return so we end the adjacency
@@ -137,21 +115,28 @@ class Agent:
         # Analogous behaviour for new connections
         # Initialise an array of potential new connections
         create_connections = []
-        # Get first connections
-        second_indexes = self.second_adjacency.nonzero()[0]
-        # Now check if any of the existing connections need undoing
-        for i in second_indexes:
-            # The probability of creating a new connection is proportional
-            # to similarity and the ratio of possible second degree connections
-            # (-2 discounts the direct connection and the agent itself)
-            create_prob = self.agents_similarities[i] * \
-                self.second_adjacency[i]/(AGENTS_COUNT - 2)
-            add_create_prob(create_prob)
-            # Then we draw from that probability, and in case true we end
-            # the adjacency and store the value to return so we end the adjacency
-            # on the other agent as well
-            if np.random.choice([True, False], p=[create_prob, 1-create_prob]):
-                create_connections.append(i)
+
+        # Grab random from population, excluding ourselves and whos already connected
+        eval_indexes = [id for id in range(AGENTS_COUNT)
+                if id not in np.append(connections_indexes, self.id)]
+        if len(eval_indexes):
+            create_evals = np.random.choice(
+                eval_indexes,
+                int(AGENTS_COUNT*INIT_CONNECTIONS_PROB)
+            )
+
+            # Now check if any of the existing connections need undoing
+            for i in create_evals:
+                # The probability of creating a new connection is proportional
+                # to similarity and the ratio of possible second degree connections
+                # (-2 discounts the direct connection and the agent itself)
+                create_prob = group_similarities[self.id][i] * self.emotion / 10
+                add_create_prob(create_prob)
+                # Then we draw from that probability, and in case true we end
+                # the adjacency and store the value to return so we end the adjacency
+                # on the other agent as well
+                if np.random.choice([True, False], p=[create_prob, 1-create_prob]):
+                    create_connections.append(i)
 
         # Now return the arrays so we can end/create the connection on the other involved agent
         return create_connections, end_connections
@@ -237,7 +222,7 @@ class Agent:
         candidates_similarities = []
         for i in range(CANDIDATES_COUNT):
             # The randomness is due to each agent perceiving the candidate's opinion with
-            # some variation. 
+            # some variation.
             perceived_position = np.random.normal(
                 CANDIDATES_OPINIONS_MEAN[i],
                 CANDIDATES_OPINIONS_STD[i],

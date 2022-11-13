@@ -42,17 +42,15 @@ class Model:
                   self.adjacency_matrix[i], self.media_conformities[i])
             for i in range(AGENTS_COUNT)
         ]
-        
-        # Refreshing the second degree adjacency also updates agents
-        self.update_second_degree_adjacency()
 
         # Initialise dynamic aggregation arrays
         # We first refresh opinions local arrays
         self.refresh_group_opinions()
+        self.update_group_similarities()
         self.refresh_media_opinions()
         # Based on the media and group opinions, the trust is updated
         for agent in self.agents:
-            agent.update_agents_trust(self.group_opinions)
+            agent.update_agents_trust(self.group_similarities)
             agent.update_media_trust(self.media_opinions)
         # And local arrays refreshed
         self.refresh_group_trust()
@@ -104,20 +102,17 @@ class Model:
             
         # Refresh local opinion arrays
         self.refresh_group_opinions()
+        self.update_group_similarities()
         self.refresh_media_opinions()
+        self.update_media_similarities()
 
         #######################################################################
         #   2.  Social network update
         #######################################################################
-        # Update the adjacency matrices
-        self.refresh_adjacency_matrix()
-        self.update_second_degree_adjacency()
-        
-        # Based on similarities with first and second degree connections, the
-        # agents social network gets updated
+        # Connections can be created or ended based on the opinion 
+        # similarity and emotional affectiveness
         for agent in self.agents:
-            agent.update_agents_similarities(self.group_opinions)
-            create_connections, end_connections = agent.update_social_network()
+            create_connections, end_connections = agent.update_social_network(self.group_similarities)
             # End the connections symmetrically 
             for connection in end_connections:
                 add_destruction()
@@ -128,13 +123,16 @@ class Model:
                 add_creation()
                 self.agents[agent.id].adjacency[connection] = 1
                 self.agents[connection].adjacency[agent.id] = 1
+                
+        # Update the adjacency matrix
+        self.refresh_adjacency_matrix()
         
         #######################################################################
         #   3.  Trust matrices update
         #######################################################################
         # Based on the media and group opinions, the trust is updated
         for agent in self.agents:
-            agent.update_agents_trust(self.group_opinions)
+            agent.update_agents_trust(self.group_similarities)
             agent.update_media_trust(self.media_opinions)
             
         # And local arrays refreshed
@@ -150,6 +148,20 @@ class Model:
             print('****************************************')
             print('*\tGroup opinions refreshed:')
             print_array(self.group_opinions)
+            
+        
+    def update_group_similarities(self):
+        norms = np.linalg.norm(self.group_opinions, axis=1)
+        cos = np.clip(
+            np.dot(self.group_opinions, self.group_opinions.T) / np.outer(norms, norms),
+            -1, 1)
+        self.group_similarities = 1 - (np.arccos(cos) / np.pi)
+        
+        if VERBOSITY & V_MODEL:
+            print('****************************************')
+            print('*\tGroup similarities updated:')
+            print_array(self.group_similarities)
+
 
     def refresh_group_trust(self):
         self.group_trust = np.array(
@@ -177,6 +189,19 @@ class Model:
             print('****************************************')
             print('*\tMedia opinions refreshed:')
             print_array(self.media_opinions)
+            
+    def update_media_similarities(self):
+        norms_group = np.linalg.norm(self.group_opinions, axis=1)
+        norms_media = np.linalg.norm(self.media_opinions, axis=1)
+        cos = np.clip(
+            np.dot(self.group_opinions, self.media_opinions.T) / np.outer(norms_group, norms_media),
+            -1, 1)
+        self.media_similarities = 1 - (np.arccos(cos) / np.pi)
+        
+        if VERBOSITY & V_MODEL:
+            print('****************************************')
+            print('*\Media similarities updated:')
+            print_array(self.media_similarities)
 
     def refresh_media_trust(self):
         self.media_trust = np.array(
@@ -196,27 +221,6 @@ class Model:
             print('*\tAdjacency matrix refreshed:')
             print_array(self.adjacency_matrix)
 
-    def update_second_degree_adjacency(self):
-        # Reset current state
-        self.second_adjacency = np.zeros((AGENTS_COUNT, AGENTS_COUNT))
-        # Iterate all rows of the adjacency matrix
-        for i in range(AGENTS_COUNT):
-            # Run though all columns for possible connected agents
-            for j in range(AGENTS_COUNT):
-                # Skip non connected agents
-                if self.adjacency_matrix[i][j] == 0:
-                    continue
-                # For each connected agent j, we find all j's connection
-                j_connections = np.where(self.adjacency_matrix[j] == 1)
-                # Then add the second degree connection to the right column in i row
-                for connection in j_connections[0]:
-                    # But do not record agent's second connections to itself,
-                    # or record second connections of who's directly connected
-                    if i != connection and self.adjacency_matrix[i][connection] == 0:
-                        self.second_adjacency[i][connection] += 1
-            # Then update at agent level
-            self.agents[i].second_adjacency = self.second_adjacency[i]
-
     def get_election_poll(self):
         # Initialise a zero array
         poll = np.zeros(CANDIDATES_COUNT)
@@ -227,12 +231,6 @@ class Model:
         poll = poll / np.sum(poll)
         return poll
 
-    def get_pca_snapshot(self):
-        opinions_list = [self.agents[i].opinions for i in range(self.n_agents)]
-        opinion_array = np.array(opinions_list)
-        pca = PCA(n_components=2, random_state=0, svd_solver='full')
-        components = pca.fit_transform(opinion_array)
-        return components, pca.explained_variance_ratio_
 
     def run(self, n_epochs: int):
         snapshot_epochs = np.linspace(0, n_epochs, N_SNAPSHOTS).astype(int)
@@ -248,7 +246,6 @@ class Model:
 
             # Store snapshots for plotting
             if epoch in snapshot_epochs:
-                # pca_components, pca_variance = self.get_pca_snapshot()
                 poll = self.get_election_poll()
                 data_snapshots.append({
                     'epoch': epoch,
