@@ -9,13 +9,13 @@ import networkx as nx
 
 
 class Analysis:
-    def __init__(self, simulation_info=None, load_from_path=None) -> None:
-        if simulation_info is not None:
-            self.simulation_info = simulation_info
+    def __init__(self, model_data=None, load_from_path=None) -> None:
+        if model_data is not None:
+            self.data = model_data
         elif load_from_path is not None:
             self.load_from_file(load_from_path)
 
-        self.snapshots = self.simulation_info['snapshots']
+        self.snapshots = self.data['snapshots']
         self.n_snapshots = len(self.snapshots)
 
         # Store array of epochs
@@ -59,13 +59,15 @@ class Analysis:
         # Save snaphsots to file
         timestamp = datetime.now().strftime('%m-%d-%H.%M')
         filename = DATA_DIR + timestamp + \
-            f'-run-({AGENTS_COUNT}|{N_EPOCHS}|{POLICIES_COUNT}|{N_SNAPSHOTS}|{INIT_EMOTIONS_MEAN:.2f}|{INIT_EMOTIONS_STD:.2f}|{NOISE_MEAN}|{NOISE_STD}).dat'
+            f'-run-({AGENTS_COUNT}ag|{N_EPOCHS}ep|{POLICIES_COUNT}po|or(σ={self.data["orientations_std"]})|em(μ={self.data["emotions_mean"]}σ={self.data["emotions_std"]})|me(μ={self.data["media_conformities_mean"]}σ={self.data["media_conformities_std"]})|ba={self.data["connections_created"] - self.data["connections_destroyed"]}.dat'
         print(f'Saving snapshots data to: {filename}')
-        pickle.dump(self.simulation_info, open(filename, 'wb'))
+        pickle.dump(self.data, open(filename, 'wb'))
+        
+        title=f'{AGENTS_COUNT} agents for {N_EPOCHS} epochs conn({self.data["init_connections"]}), orientations (σ={self.data["orientations_std"]}), emotions (μ={self.data["emotions_mean"]},σ={self.data["emotions_std"]}), media (μ={self.data["media_conformities_mean"]},σ={self.data["media_conformities_std"]}) balance {self.data["connections_created"] - self.data["connections_destroyed"]}',
 
     def load_from_file(self, file_path):
-        simulation_info = pickle.load(open(file_path, 'rb'))
-        self.simulation_info = simulation_info
+        data = pickle.load(open(file_path, 'rb'))
+        self.data = data
 
     def get_graph_network_traces(self, step=0):
         graph = self.graphs[step]
@@ -233,6 +235,7 @@ class Analysis:
         # For complex figures with custom rations and axes,
         # layout must be set in low-level
         layout = dict(
+            title=f'{AGENTS_COUNT} agents for {N_EPOCHS} epochs conn({self.data["init_connections"]}), orientations (σ={self.data["orientations_std"]}), emotions (μ={self.data["emotions_mean"]},σ={self.data["emotions_std"]}), media (μ={self.data["media_conformities_mean"]},σ={self.data["media_conformities_std"]}) balance {self.data["connections_created"] - self.data["connections_destroyed"]}',
             scene={
                 'xaxis': {
                     'title': 'Policy 1',

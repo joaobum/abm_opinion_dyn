@@ -22,7 +22,7 @@ class Agent:
         # Agents that are more emotional about their opinions will have a narrower distribution
         # around their orientation.
         self.opinions = np.random.normal(
-            orientation, (1 - emotion)/5, POLICIES_COUNT)
+            orientation, ((1 - emotion)*(1 - orientation)), POLICIES_COUNT)
         self.opinions = np.clip(self.opinions, OPINION_MIN, OPINION_MAX)
 
         # Initialise zero arrays that will be updated on each iteration
@@ -122,7 +122,7 @@ class Agent:
         if len(eval_indexes):
             create_evals = np.random.choice(
                 eval_indexes,
-                int(AGENTS_COUNT*INIT_CONNECTIONS_PROB)
+                int(10)
             )
 
             # Now check if any of the existing connections need undoing

@@ -12,29 +12,37 @@ from agent import Agent
 
 class Model:
 
-    def __init__(self):
+    def __init__(self,
+                 init_connections,
+                 orientations_std,
+                 emotions_mean,
+                 emotions_std,
+                 media_conformities_mean,
+                 media_conformities_std):
         # Initialise social network
+        self.init_connections_prob = init_connections
         social_graph = random_graphs.erdos_renyi_graph(
-            AGENTS_COUNT, INIT_CONNECTIONS_PROB, seed=1)
+            AGENTS_COUNT, init_connections, seed=SEED)
         self.adjacency_matrix = nx.to_numpy_array(social_graph)
-        
+
         # Initialise agents
         # Draw orientation, emotion and media conformity values from
         # normal distribution for all agents, then make sure to clip them to
         # boundaries
         agents_orientations = np.random.normal(
-            INIT_ORIENTATIONS_MEAN, INIT_ORIENTATIONS_STD, AGENTS_COUNT)
+            INIT_ORIENTATIONS_MEAN, orientations_std, AGENTS_COUNT)
         agents_orientations = np.clip(
             agents_orientations, ORIENTATION_MIN, ORIENTATION_MAX)
         # We store the values for emotions and conformities
         self.agents_emotions = np.random.normal(
-            INIT_EMOTIONS_MEAN, INIT_EMOTIONS_STD, AGENTS_COUNT)
-        self.agents_emotions = np.clip(self.agents_emotions, EMOTION_MIN, EMOTION_MAX)
+            emotions_mean, emotions_std, AGENTS_COUNT)
+        self.agents_emotions = np.clip(
+            self.agents_emotions, EMOTION_MIN, EMOTION_MAX)
         self.media_conformities = np.random.normal(
-            MEDIA_CONFORMITY_MEAN, MEDIA_CONFORMITY_STD, AGENTS_COUNT)
+            media_conformities_mean, media_conformities_std, AGENTS_COUNT)
         self.media_conformities = np.clip(
             self.media_conformities, MEDIA_CONFORMITY_MIN, MEDIA_CONFORMITY_MAX)
-        
+
         # Populate the agents array. The agents initilisation draws values
         # for their opinion array based on initial orientation and emotion.
         self.agents = [
@@ -56,7 +64,20 @@ class Model:
         self.refresh_group_trust()
         self.refresh_media_trust()
 
-        self.epoch = 0
+        # Set model data collection dictionary
+        self.data = {
+            'init_connections': init_connections, 
+            'orientations_std': orientations_std, 
+            'emotions_mean': emotions_mean, 
+            'emotions_std': emotions_std, 
+            'media_conformities_mean': media_conformities_mean, 
+            'media_conformities_std': media_conformities_std,
+            'connections_created': 0,
+            'connections_destroyed': 0,
+            'snapshots': []
+        }
+        self.connections_created = 0
+        self.connections_destroyed = 0
 
     def step(self):
         #######################################################################
@@ -99,7 +120,7 @@ class Model:
         for i in range(AGENTS_COUNT):
             self.agents[i].interact(external_influence[i])
             self.agents[i].add_noise(noise_influence[i])
-            
+
         # Refresh local opinion arrays
         self.refresh_group_opinions()
         self.update_group_similarities()
@@ -109,24 +130,25 @@ class Model:
         #######################################################################
         #   2.  Social network update
         #######################################################################
-        # Connections can be created or ended based on the opinion 
+        # Connections can be created or ended based on the opinion
         # similarity and emotional affectiveness
         for agent in self.agents:
-            create_connections, end_connections = agent.update_social_network(self.group_similarities)
-            # End the connections symmetrically 
+            create_connections, end_connections = agent.update_social_network(
+                self.group_similarities)
+            # End the connections symmetrically
             for connection in end_connections:
-                add_destruction()
                 self.agents[agent.id].adjacency[connection] = 0
                 self.agents[connection].adjacency[agent.id] = 0
-            # Create new connections symmetrically 
+                self.data['connections_destroyed'] += 1
+            # Create new connections symmetrically
             for connection in create_connections:
-                add_creation()
                 self.agents[agent.id].adjacency[connection] = 1
                 self.agents[connection].adjacency[agent.id] = 1
-                
+                self.data['connections_created'] += 1
+
         # Update the adjacency matrix
         self.refresh_adjacency_matrix()
-        
+
         #######################################################################
         #   3.  Trust matrices update
         #######################################################################
@@ -134,11 +156,10 @@ class Model:
         for agent in self.agents:
             agent.update_agents_trust(self.group_similarities)
             agent.update_media_trust(self.media_opinions)
-            
+
         # And local arrays refreshed
         self.refresh_group_trust()
         self.refresh_media_trust()
-
 
     def refresh_group_opinions(self):
         self.group_opinions = np.array(
@@ -148,20 +169,19 @@ class Model:
             print('****************************************')
             print('*\tGroup opinions refreshed:')
             print_array(self.group_opinions)
-            
-        
+
     def update_group_similarities(self):
         norms = np.linalg.norm(self.group_opinions, axis=1)
         cos = np.clip(
-            np.dot(self.group_opinions, self.group_opinions.T) / np.outer(norms, norms),
+            np.dot(self.group_opinions, self.group_opinions.T) /
+            np.outer(norms, norms),
             -1, 1)
         self.group_similarities = 1 - (np.arccos(cos) / np.pi)
-        
+
         if VERBOSITY & V_MODEL:
             print('****************************************')
             print('*\tGroup similarities updated:')
             print_array(self.group_similarities)
-
 
     def refresh_group_trust(self):
         self.group_trust = np.array(
@@ -189,15 +209,16 @@ class Model:
             print('****************************************')
             print('*\tMedia opinions refreshed:')
             print_array(self.media_opinions)
-            
+
     def update_media_similarities(self):
         norms_group = np.linalg.norm(self.group_opinions, axis=1)
         norms_media = np.linalg.norm(self.media_opinions, axis=1)
         cos = np.clip(
-            np.dot(self.group_opinions, self.media_opinions.T) / np.outer(norms_group, norms_media),
+            np.dot(self.group_opinions, self.media_opinions.T) /
+            np.outer(norms_group, norms_media),
             -1, 1)
         self.media_similarities = 1 - (np.arccos(cos) / np.pi)
-        
+
         if VERBOSITY & V_MODEL:
             print('****************************************')
             print('*\Media similarities updated:')
@@ -211,7 +232,7 @@ class Model:
             print('****************************************')
             print('*\tMedia trust refreshed:')
             print_array(self.media_trust)
-    
+
     def refresh_adjacency_matrix(self):
         self.adjacency_matrix = np.array(
             [agent.adjacency for agent in self.agents]
@@ -231,10 +252,8 @@ class Model:
         poll = poll / np.sum(poll)
         return poll
 
-
     def run(self, n_epochs: int):
         snapshot_epochs = np.linspace(0, n_epochs, N_SNAPSHOTS).astype(int)
-        data_snapshots = []
         print('\n********************************************************************************\n')
         print(f'Starting model run for {n_epochs} epochs.\n')
 
@@ -247,7 +266,7 @@ class Model:
             # Store snapshots for plotting
             if epoch in snapshot_epochs:
                 poll = self.get_election_poll()
-                data_snapshots.append({
+                self.data['snapshots'].append({
                     'epoch': epoch,
                     'group_opinions': self.group_opinions.copy(),
                     'media_opinions': self.media_opinions.copy(),
@@ -258,9 +277,4 @@ class Model:
             # Step the model
             self.step()
 
-        # Build the simulation info
-        simulation_info = {
-            'snapshots': data_snapshots
-        }
-
-        return simulation_info
+    

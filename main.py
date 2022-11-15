@@ -7,26 +7,24 @@ import time
 
 
 # before = time.time()
+for init_connections in INIT_CONNECTIONS_PROB:
+    for orientations_std in INIT_ORIENTATIONS_STD:
+        for emotions_mean in INIT_EMOTIONS_MEAN:
+            for emotions_std in INIT_EMOTIONS_STD:
+                for media_conformities_mean in MEDIA_CONFORMITY_MEAN:
+                    for media_conformities_std in MEDIA_CONFORMITY_STD: 
 
-model = Model()
-simulation_info = model.run(N_EPOCHS)
-5
-analysis = Analysis(simulation_info=simulation_info)
-# analysis.save_to_file()
-analysis.plot_full_analysis()
-
-
-
-# analysis2 = Analysis(load_from_path='/Users/joaoreis/Documents/Study/Masters/Final_Project/abm_opinion_dyn/data/11-07-01.07-run-(200|2000|3|501|0.25|0.05|0|0.03).dat')
-# analysis2.plot_full_analysis()
-# plot_graph(graphs_list[0], data[0]['group_opinions'])
-
-
-# print(f'run time: {time.time() - before} s')
-print_create_prob()
-print_end_prob()
-print_creations()
-print_destructions()
+                        model = Model(init_connections, 
+                                      orientations_std, 
+                                      emotions_mean, 
+                                      emotions_std, 
+                                      media_conformities_mean, 
+                                      media_conformities_std)
+                        model.run(N_EPOCHS)
+                        analysis = Analysis(model_data=model.data)
+                        analysis.save_to_file()
+                        analysis.plot_full_analysis()
+    
 
     
     

@@ -16,13 +16,13 @@ N_SNAPSHOTS = 167
 DATA_DIR = f'{pathlib.Path(__file__).parent.resolve()}/data/'
 
 # Agents initialisation
-INIT_CONNECTIONS_PROB = 0.1
+INIT_CONNECTIONS_PROB = [0.05, 0.1]
 INIT_ORIENTATIONS_MEAN = 0
-INIT_ORIENTATIONS_STD = 0.2
-INIT_EMOTIONS_MEAN = 0.5
-INIT_EMOTIONS_STD = 0.1
-MEDIA_CONFORMITY_MEAN = 0.0
-MEDIA_CONFORMITY_STD = 0.0
+INIT_ORIENTATIONS_STD = [0.15, 0.3, 0.45]
+INIT_EMOTIONS_MEAN = [0.2, 0.4, 0.6]
+INIT_EMOTIONS_STD = [0.1, 0.3]
+MEDIA_CONFORMITY_MEAN = [0.0, 0.1, 0.3]
+MEDIA_CONFORMITY_STD = [0.0]
 
 # Media parameters
 MEDIA_OUTLETS_COUNT = 2
@@ -32,7 +32,7 @@ MEDIA_OUTLETS_STD = [0.1, 0.1]
 # Candidates parameters
 CANDIDATES_COUNT = 2
 CANDIDATES_OPINIONS_MEAN = [-0.7, 0.7]
-CANDIDATES_OPINIONS_STD = [0.1, 0.15]
+CANDIDATES_OPINIONS_STD = [0.15, 0.15]
 
 # Noise
 NOISE_MEAN = 0
@@ -50,8 +50,11 @@ NOISE_MAX = 1
 MEDIA_CONFORMITY_MIN = 0
 MEDIA_CONFORMITY_MAX = 1
 
+# Random seed for consistency
+SEED = None
+np.random.seed(SEED)
 
-
+# Logging
 V_AGENT = 1
 V_MODEL = 2
 V_ANALYSIS = 4
@@ -62,11 +65,6 @@ VERBOSITY = V_AGENT     * 0 + \
             V_MODEL     * 0 + \
             V_ANALYSIS  * 0 + \
             V_MAIN      * 0
-
-
-# Random seed for consistency
-# np.random.seed(0)
-
 
 ############################################################################
 # Helper functions
