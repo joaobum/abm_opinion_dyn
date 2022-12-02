@@ -87,7 +87,7 @@ class Model:
         # And local arrays refreshed
         self.refresh_group_trust()
         self.refresh_media_trust()
-        print(f'1  ->  {time.perf_counter() - tic}')
+        # print(f'1  ->  {time.perf_counter() - tic}')
         
         #######################################################################
         #   2.  Opinion interaction
@@ -136,7 +136,7 @@ class Model:
         self.update_group_similarities()
         self.refresh_media_opinions()
         self.update_media_similarities()
-        print(f'2  ->  {time.perf_counter() - tic}')
+        # print(f'2  ->  {time.perf_counter() - tic}')
 
         #######################################################################
         #   3.  Social network update
@@ -160,7 +160,7 @@ class Model:
 
         # Update the adjacency matrix
         self.refresh_adjacency_matrix()
-        print(f'3  ->  {time.perf_counter() - tic}')
+        # print(f'3  ->  {time.perf_counter() - tic}')
 
         
 

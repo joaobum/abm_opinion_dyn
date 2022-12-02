@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 from datetime import datetime
 from configuration import *
 import networkx as nx
-
+from sklearn.decomposition import PCA
 
 class Analysis:
     def __init__(self, model_data=None, load_from_path=None) -> None:
@@ -72,6 +72,10 @@ class Analysis:
     def get_graph_network_traces(self, step=0):
         graph = self.graphs[step]
         opinions = self.opinions[step]
+        # If our opinion is more than 3d, then get a PCA
+        # if opinions.shape[1] >= 3:
+        pca = PCA(n_components=3, random_state=0, svd_solver="auto")
+        opinions = pca.fit_transform(opinions)
         edge_x = []
         edge_y = []
         edge_z = []
@@ -121,7 +125,8 @@ class Analysis:
         node_text = []
         for node, adjacencies in enumerate(graph.adjacency()):
             node_adjacencies.append(len(adjacencies[1]))
-            node_text.append('# of connections: '+str(len(adjacencies[1])))
+            node_text.append(f'connections: {len(adjacencies[1])}\nopinions: {self.opinions[step][node]}')
+            # node_text.append(f'opinions: {self.opinions[step][node]}')
 
         node_trace.marker.color = node_adjacencies
         node_trace.text = node_text

@@ -102,14 +102,17 @@ class Agent:
         connections_indexes = self.adjacency.nonzero()[0]
         # Now check if any of the existing connections need undoing
         for i in connections_indexes:
-            # The probability of endind an existing relationship is influenced
-            # by the dissimilarity and emotional affectiveness
-            end_prob = (1 - group_similarities[self.id][i]) * self.emotion * group_opinion_strengths[self.id] * group_opinion_strengths[i]
-            add_end_prob(end_prob)
-            # Then we draw from that probability, and in case true we end
-            # the adjacency and store the value to return so we end the adjacency
-            # on the other agent as well
-            if np.random.choice([True, False], p=[end_prob, 1-end_prob]):
+            # # The probability of endind an existing relationship is influenced
+            # # by the dissimilarity and emotional affectiveness
+            # end_prob = (1 - group_similarities[self.id][i]) * group_opinion_strengths[i] > self.emotion * group_opinion_strengths[self.id] 
+            
+            # # Then we draw from that probability, and in case true we end
+            # # the adjacency and store the value to return so we end the adjacency
+            # # on the other agent as well
+            # if np.random.choice([True, False], p=[end_prob, 1-end_prob]):
+            #     end_connections.append(i)
+                
+            if group_similarities[self.id][i] * group_opinion_strengths[i] < self.emotion * group_opinion_strengths[self.id]:
                 end_connections.append(i)
         # Analogous behaviour for new connections
         # Initialise an array of potential new connections
@@ -126,15 +129,18 @@ class Agent:
 
             # Now check if any of the existing connections need undoing
             for i in create_evals:
-                # The probability of creating a new connection is proportional
-                # to similarity and the ratio of possible second degree connections
-                # (-2 discounts the direct connection and the agent itself)
-                create_prob = group_similarities[self.id][i] * self.emotion * group_opinion_strengths[self.id] * group_opinion_strengths[i]
-                add_create_prob(create_prob)
-                # Then we draw from that probability, and in case true we end
-                # the adjacency and store the value to return so we end the adjacency
-                # on the other agent as well
-                if np.random.choice([True, False], p=[create_prob, 1-create_prob]):
+                # # The probability of creating a new connection is proportional
+                # # to similarity and the ratio of possible second degree connections
+                # # (-2 discounts the direct connection and the agent itself)
+                # create_prob = group_similarities[self.id][i] * self.emotion * group_opinion_strengths[self.id] * group_opinion_strengths[i]
+                # add_create_prob(create_prob)
+                # # Then we draw from that probability, and in case true we end
+                # # the adjacency and store the value to return so we end the adjacency
+                # # on the other agent as well
+                # if np.random.choice([True, False], p=[create_prob, 1-create_prob]):
+                #     create_connections.append(i)
+                    
+                if group_similarities[self.id][i] * group_opinion_strengths[i] > self.emotion * group_opinion_strengths[self.id]:
                     create_connections.append(i)
 
         # Now return the arrays so we can end/create the connection on the other involved agent

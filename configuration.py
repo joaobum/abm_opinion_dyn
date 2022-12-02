@@ -7,9 +7,9 @@ import pathlib
 ############################################################################
 
 # Model size
-POLICIES_COUNT = 3
-AGENTS_COUNT = 300
-N_EPOCHS = 1000
+POLICIES_COUNT = 2
+AGENTS_COUNT = 30
+N_EPOCHS = 2000
 
 # Data capturing
 N_SNAPSHOTS = 201
@@ -18,11 +18,11 @@ DATA_DIR = f'{pathlib.Path(__file__).parent.resolve()}/data/'
 # Agents initialisation
 INIT_CONNECTIONS_PROB = [0.1]
 INIT_ORIENTATIONS_MEAN = 0
-INIT_ORIENTATIONS_STD = [0.15, 0.3, 0.45]
-INIT_EMOTIONS_MEAN = [0.2]
-INIT_EMOTIONS_STD = [0]
-MEDIA_CONFORMITY_MEAN = [0.2]
-MEDIA_CONFORMITY_STD = [0.1]
+INIT_ORIENTATIONS_STD = [0.3]
+INIT_EMOTIONS_MEAN = [0.5]
+INIT_EMOTIONS_STD = [0.2]
+MEDIA_CONFORMITY_MEAN = [0]
+MEDIA_CONFORMITY_STD = [0]
 INTERACTION_RATIO = 1
 
 # Media parameters

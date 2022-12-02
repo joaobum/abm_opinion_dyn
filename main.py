@@ -25,8 +25,9 @@ for init_connections in INIT_CONNECTIONS_PROB:
                         analysis.plot_full_analysis()
     
 
-    
-    
+
+# analysis = Analysis(load_from_path='/Users/joaoreis/Documents/Study/Masters/Final_Project/abm_opinion_dyn/data/12-02-22.10-run-(10ag|1000ep|3po|or(σ=0.3)|em(μ=0.5σ=0.2)|me(μ=0σ=0)|ba=22459.dat')
+# analysis.plot_full_analysis()
     
 # for emotions_mean in [0.5]:
 #     for noise_intensity_mean in [0.5]:
