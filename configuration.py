@@ -6,37 +6,38 @@ import pathlib
 # Model parameters
 ############################################################################
 
-# Size
+# Model size
 POLICIES_COUNT = 3
-AGENTS_COUNT = 100
-N_EPOCHS = 500
+AGENTS_COUNT = 300
+N_EPOCHS = 1000
 
-# Tracing
-N_SNAPSHOTS = 167
+# Data capturing
+N_SNAPSHOTS = 201
 DATA_DIR = f'{pathlib.Path(__file__).parent.resolve()}/data/'
 
 # Agents initialisation
-INIT_CONNECTIONS_PROB = [0.05, 0.1]
+INIT_CONNECTIONS_PROB = [0.1]
 INIT_ORIENTATIONS_MEAN = 0
 INIT_ORIENTATIONS_STD = [0.15, 0.3, 0.45]
-INIT_EMOTIONS_MEAN = [0.2, 0.4, 0.6]
-INIT_EMOTIONS_STD = [0.1, 0.3]
-MEDIA_CONFORMITY_MEAN = [0.0, 0.1, 0.3]
-MEDIA_CONFORMITY_STD = [0.0]
+INIT_EMOTIONS_MEAN = [0.2]
+INIT_EMOTIONS_STD = [0]
+MEDIA_CONFORMITY_MEAN = [0.2]
+MEDIA_CONFORMITY_STD = [0.1]
+INTERACTION_RATIO = 1
 
 # Media parameters
-MEDIA_OUTLETS_COUNT = 2
-MEDIA_OUTLETS_MEANS = [-0.5, 0.5]
-MEDIA_OUTLETS_STD = [0.1, 0.1]
+MEDIA_OUTLETS_COUNT = 3
+MEDIA_OUTLETS_MEANS = [-0.5, 0, 0.5]
+MEDIA_OUTLETS_STD = [0.1, 0.2, 0.1]
+
+# Noise
+NOISE_MEAN = 0
+NOISE_STD = 0.03
 
 # Candidates parameters
 CANDIDATES_COUNT = 2
 CANDIDATES_OPINIONS_MEAN = [-0.7, 0.7]
 CANDIDATES_OPINIONS_STD = [0.15, 0.15]
-
-# Noise
-NOISE_MEAN = 0
-NOISE_STD = 0.03
 
 # Boundaries
 OPINION_MAX = 1
@@ -51,10 +52,10 @@ MEDIA_CONFORMITY_MIN = 0
 MEDIA_CONFORMITY_MAX = 1
 
 # Random seed for consistency
-SEED = None
+SEED = 1
 np.random.seed(SEED)
 
-# Logging
+# Tracing
 V_AGENT = 1
 V_MODEL = 2
 V_ANALYSIS = 4

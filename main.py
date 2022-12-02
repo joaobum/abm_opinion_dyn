@@ -3,7 +3,6 @@ import numpy as np
 from configuration import *
 from model import Model
 from analysis import Analysis
-import time
 
 
 # before = time.time()

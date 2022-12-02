@@ -8,6 +8,7 @@ import networkx as nx
 
 from configuration import *
 from agent import Agent
+import time
 
 
 class Model:
@@ -52,17 +53,9 @@ class Model:
         ]
 
         # Initialise dynamic aggregation arrays
-        # We first refresh opinions local arrays
         self.refresh_group_opinions()
         self.update_group_similarities()
         self.refresh_media_opinions()
-        # Based on the media and group opinions, the trust is updated
-        for agent in self.agents:
-            agent.update_agents_trust(self.group_similarities)
-            agent.update_media_trust(self.media_opinions)
-        # And local arrays refreshed
-        self.refresh_group_trust()
-        self.refresh_media_trust()
 
         # Set model data collection dictionary
         self.data = {
@@ -80,9 +73,26 @@ class Model:
         self.connections_destroyed = 0
 
     def step(self):
+        # We first select a random smaple of the agent's pool without replacement
+        active_agents = np.random.choice(AGENTS_COUNT, int(AGENTS_COUNT * INTERACTION_RATIO), False)
         #######################################################################
-        #   1.  Opinion interaction
+        #   1.  Trust matrices update
         #######################################################################
+        tic = time.perf_counter()
+        # Based on the media and group opinions, the trust is updated
+        for i in active_agents:
+            self.agents[i].update_agents_trust(self.group_similarities)
+            self.agents[i].update_media_trust(self.media_opinions)
+
+        # And local arrays refreshed
+        self.refresh_group_trust()
+        self.refresh_media_trust()
+        print(f'1  ->  {time.perf_counter() - tic}')
+        
+        #######################################################################
+        #   2.  Opinion interaction
+        #######################################################################
+        tic = time.perf_counter()
         # We got all we need to calculate opinion influences
         # Get the total group and total media influence based on trust in each element
         group_influence = np.matmul(self.group_trust, self.group_opinions)
@@ -117,7 +127,7 @@ class Model:
         # Now update each agent's opinion by making it interact with the calculated
         # external influence. The opinions will also suffer some noise that represents
         # communication innacuracies.
-        for i in range(AGENTS_COUNT):
+        for i in active_agents:
             self.agents[i].interact(external_influence[i])
             self.agents[i].add_noise(noise_influence[i])
 
@@ -126,49 +136,44 @@ class Model:
         self.update_group_similarities()
         self.refresh_media_opinions()
         self.update_media_similarities()
+        print(f'2  ->  {time.perf_counter() - tic}')
 
         #######################################################################
-        #   2.  Social network update
+        #   3.  Social network update
         #######################################################################
+        tic = time.perf_counter()
         # Connections can be created or ended based on the opinion
         # similarity and emotional affectiveness
-        for agent in self.agents:
-            create_connections, end_connections = agent.update_social_network(
-                self.group_similarities)
+        for i in active_agents:
+            create_connections, end_connections = self.agents[i].update_social_network(
+                self.group_similarities, self.group_opinion_strengths)
             # End the connections symmetrically
             for connection in end_connections:
-                self.agents[agent.id].adjacency[connection] = 0
-                self.agents[connection].adjacency[agent.id] = 0
+                self.agents[i].adjacency[connection] = 0
+                self.agents[connection].adjacency[i] = 0
                 self.data['connections_destroyed'] += 1
             # Create new connections symmetrically
             for connection in create_connections:
-                self.agents[agent.id].adjacency[connection] = 1
-                self.agents[connection].adjacency[agent.id] = 1
+                self.agents[i].adjacency[connection] = 1
+                self.agents[connection].adjacency[i] = 1
                 self.data['connections_created'] += 1
 
         # Update the adjacency matrix
         self.refresh_adjacency_matrix()
+        print(f'3  ->  {time.perf_counter() - tic}')
 
-        #######################################################################
-        #   3.  Trust matrices update
-        #######################################################################
-        # Based on the media and group opinions, the trust is updated
-        for agent in self.agents:
-            agent.update_agents_trust(self.group_similarities)
-            agent.update_media_trust(self.media_opinions)
-
-        # And local arrays refreshed
-        self.refresh_group_trust()
-        self.refresh_media_trust()
+        
 
     def refresh_group_opinions(self):
         self.group_opinions = np.array(
             [agent.opinions for agent in self.agents]
         )
+        self.group_opinion_strengths = np.linalg.norm(self.group_opinions, axis=1) / np.sqrt(POLICIES_COUNT)
         if VERBOSITY & V_MODEL:
             print('****************************************')
             print('*\tGroup opinions refreshed:')
             print_array(self.group_opinions)
+            print_array(self.group_opinion_strengths)
 
     def update_group_similarities(self):
         norms = np.linalg.norm(self.group_opinions, axis=1)

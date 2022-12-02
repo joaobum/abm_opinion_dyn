@@ -105,7 +105,7 @@ class Analysis:
                 colorscale='YlGnBu',
                 reversescale=False,
                 color=[],
-                size=3,
+                size=4,
                 # colorbar=dict(
                 #     thickness=15,
                 #     title='Node Connections',

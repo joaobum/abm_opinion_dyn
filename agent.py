@@ -20,13 +20,12 @@ class Agent:
 
         # Initialise opinions based on initial orientation and emotional affectiveness
         # Agents that are more emotional about their opinions will have a narrower distribution
-        # around their orientation.
+        # around their orientation. Orientation gets normalised from [-1, 1] to [0, 1]
         self.opinions = np.random.normal(
-            orientation, ((1 - emotion)*(1 - orientation)), POLICIES_COUNT)
+            orientation, ((1 - emotion)*(1 - (orientation + 1) / 2)), POLICIES_COUNT)
         self.opinions = np.clip(self.opinions, OPINION_MIN, OPINION_MAX)
 
         # Initialise zero arrays that will be updated on each iteration
-        self.second_adjacency = np.zeros(AGENTS_COUNT)
         self.agents_similarities = np.zeros(AGENTS_COUNT)
         self.agents_trust = np.zeros(AGENTS_COUNT)
         self.media_trust = np.zeros(MEDIA_OUTLETS_COUNT)
@@ -96,7 +95,7 @@ class Agent:
         # And finally normalise the trust
         self.media_trust = self.media_trust / np.sum(self.media_trust)
 
-    def update_social_network(self, group_similarities: np.ndarray):
+    def update_social_network(self, group_similarities: np.ndarray, group_opinion_strengths: np.ndarray):
         # Initialise an array of potential connection breaks
         end_connections = []
         # Get first connections
@@ -105,7 +104,7 @@ class Agent:
         for i in connections_indexes:
             # The probability of endind an existing relationship is influenced
             # by the dissimilarity and emotional affectiveness
-            end_prob = (1 - group_similarities[self.id][i]) * self.emotion / 10
+            end_prob = (1 - group_similarities[self.id][i]) * self.emotion * group_opinion_strengths[self.id] * group_opinion_strengths[i]
             add_end_prob(end_prob)
             # Then we draw from that probability, and in case true we end
             # the adjacency and store the value to return so we end the adjacency
@@ -130,7 +129,7 @@ class Agent:
                 # The probability of creating a new connection is proportional
                 # to similarity and the ratio of possible second degree connections
                 # (-2 discounts the direct connection and the agent itself)
-                create_prob = group_similarities[self.id][i] * self.emotion / 10
+                create_prob = group_similarities[self.id][i] * self.emotion * group_opinion_strengths[self.id] * group_opinion_strengths[i]
                 add_create_prob(create_prob)
                 # Then we draw from that probability, and in case true we end
                 # the adjacency and store the value to return so we end the adjacency
@@ -202,9 +201,12 @@ class Agent:
         if np.any(ref_opinions):
             # Get the relative angle
             angle = self.get_angle(ref_opinions)
-            # Now calculate the dissonance factor and use it to modulate the rotation angle together with agent's emotion
+            # The relative strength of opinions dictate the bias of opinion rotation
+            reference_strength = np.linalg.norm(ref_opinions) / np.sqrt(POLICIES_COUNT)
+            own_strength = np.linalg.norm(self.opinions) / np.sqrt(POLICIES_COUNT)
+            relative_strength = np.clip(reference_strength / own_strength, 0.5, 2)
             dissonance_factor = np.sin(2 * angle) / 2
-            rotation_angle = angle * dissonance_factor
+            rotation_angle = angle * dissonance_factor * relative_strength * (1 - self.emotion)
             # And do the job
             if VERBOSITY & V_AGENT:
                 print(
