@@ -237,7 +237,7 @@ class Analysis:
         candidates_traces.append(epoch_reference)
         return candidates_traces
 
-    def get_mean_opinions_trace(self, step=0):
+    def get_mean_opinions_traces(self, step=0):
         
         mean_opinions_trace = go.Scatter(
             x=self.epochs,
@@ -268,6 +268,23 @@ class Analysis:
         # layout must be set in low-level
         layout = dict(
             title=f'{AGENTS_COUNT} agents for {N_EPOCHS} epochs conn({self.data["init_connections"]}), orientations (σ={self.data["orientations_std"]}), emotions (μ={self.data["emotions_mean"]},σ={self.data["emotions_std"]}), media (μ={self.data["media_conformities_mean"]},σ={self.data["media_conformities_std"]}) balance {self.data["connections_created"] - self.data["connections_destroyed"]}',
+            # scene={
+            #     'xaxis': {
+            #         'title': 'Policy 1',
+            #         'range': [-1, 1]
+            #     },
+            #     'yaxis': {
+            #         'title': 'Policy 2',
+            #         'range': [-1, 1]
+            #     },
+            #     'zaxis': {
+            #         'title': 'Policy 3',
+            #         'range': [-1, 1]
+            #     },
+            #     'domain_x': [0, 0.5],
+            #     'domain_y': [0, 1]
+            # },
+            # scene_aspectmode='cube',
             xaxis1={
                 # 'domain': [0, 0.45],
                 'anchor': 'y1',
@@ -296,7 +313,8 @@ class Analysis:
                 # 'domain': [0.0, 0.45],
                 'anchor': 'y3',
                 'title': 'Epoch',
-                'range': [0, self.epochs[-1]]
+                'range': [0, self.epochs[-1]],
+                'visible': False
             },
             yaxis3={
                 # 'domain': [0, 0.45],
@@ -304,7 +322,7 @@ class Analysis:
                 'title': 'Vote probability [%]',
                 'range': [self.min_vote_prob*100*0.9, self.max_vote_prob*100*1.1]
             },
-            yaxis4={
+            yaxis5={
                 'anchor': 'x3',
                 'overlaying': 'y3',
                 'title': 'Mean opinion',
@@ -313,17 +331,16 @@ class Analysis:
             },
             xaxis4={
                 # 'domain': [0.55, 1],
-                'anchor': 'y5',
+                'anchor': 'y4',
                 'title': 'Node Degree',
                 'range': [0, self.max_degree]
             },
-            yaxis5={
+            yaxis4={
                 # 'domain': [0.0, 0.45],
                 'anchor': 'x4',
                 'title': 'Ratio [%]',
                 'range': [0, self.max_degree_count/self.n_agents * 100 + 10]
             },
-            
             margin={
                 't': 50,
                 'b': 50,
@@ -423,12 +440,13 @@ class Analysis:
         )
 
         # Create initial plots, the same order here needs to be followed in the frames array
-        plot_rows =     [1,     2,      2,      2,      2,      1,      1,      2]
-        plot_cols =     [1,     1,      1,      1,      1,      2,      2,      2]
-        secondary_ys =  [False, False,  False,  False,  True,  False,   False,  False]
+        plot_rows = [1, 2, 2, 2, 2, 1, 1, 2]
+        plot_cols = [1, 1, 1, 1, 1, 2, 2, 2]
+        secondary_ys = [False, False, False, False,
+                        True, False, False, False, False]
         fig.add_traces((self.get_agents_mean_opinion_trace() +
                         self.get_vote_polls_traces() +
-                        self.get_mean_opinions_trace() +
+                        self.get_mean_opinions_traces() +
                         self.get_graph_density_traces()+
                         self.get_graph_histogram_trace()),
                        rows=plot_rows,
@@ -442,7 +460,7 @@ class Analysis:
             # Tracing needs to be in the same order as the initial figures
             data=(self.get_agents_mean_opinion_trace(step) +
                   self.get_vote_polls_traces(step) +
-                  self.get_mean_opinions_trace(step) +
+                  self.get_mean_opinions_traces(step) +
                   self.get_graph_density_traces(step)+
                   self.get_graph_histogram_trace(step)),
             # Using the plot rows from the initial figure guarantees consistency
