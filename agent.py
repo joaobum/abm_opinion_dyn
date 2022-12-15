@@ -8,7 +8,7 @@ def normpdf(x, sd):
 
 
 class Agent:
-    def __init__(self, id: int, orientation: float, emotion: float, adjacency: np.array, media_conformity: float) -> None:
+    def __init__(self, id: int, n_policies: int, orientation: float, emotion: float, adjacency: np.array, media_conformity: float) -> None:
         if VERBOSITY & V_AGENT:
             print(
                 f'Initialising agent {id}:\torientation = {orientation:.3f}\temotion = {emotion:.3f}')
@@ -22,7 +22,7 @@ class Agent:
         # Agents that are more emotional about their opinions will have a narrower distribution
         # around their orientation. Orientation gets normalised from [-1, 1] to [0, 1]
         self.opinions = np.random.normal(
-            orientation, ((1 - emotion)*(1 - (orientation + 1) / 2)), POLICIES_COUNT)
+            orientation, ((1 - emotion)*(1 - (orientation + 1) / 2)), n_policies)
         self.opinions = np.clip(self.opinions, OPINION_MIN, OPINION_MAX)
 
         # Initialise zero arrays that will be updated on each iteration
@@ -208,8 +208,8 @@ class Agent:
             # Get the relative angle
             angle = self.get_angle(ref_opinions)
             # The relative strength of opinions dictate the bias of opinion rotation
-            reference_strength = np.linalg.norm(ref_opinions) / np.sqrt(POLICIES_COUNT)
-            own_strength = np.linalg.norm(self.opinions) / np.sqrt(POLICIES_COUNT)
+            reference_strength = np.linalg.norm(ref_opinions) / np.sqrt(len(ref_opinions))
+            own_strength = np.linalg.norm(self.opinions) / np.sqrt(len(ref_opinions))
             relative_strength = np.clip(reference_strength / own_strength, 0.5, 2)
             dissonance_factor = np.sin(2 * angle) / 2
             rotation_angle = angle * dissonance_factor * relative_strength * (1 - self.emotion)
@@ -234,7 +234,7 @@ class Agent:
             perceived_position = np.random.normal(
                 CANDIDATES_OPINIONS_MEAN[i],
                 CANDIDATES_OPINIONS_STD[i],
-                POLICIES_COUNT
+                len(self.opinions)
             )
             candidates_similarities.append(
                 self.get_directional_similarity(perceived_position))

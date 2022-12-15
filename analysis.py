@@ -59,7 +59,7 @@ class Analysis:
         # Save snaphsots to file
         timestamp = datetime.now().strftime('%m-%d-%H.%M')
         filename = DATA_DIR + timestamp + \
-            f'-run-({AGENTS_COUNT}ag|{N_EPOCHS}ep|{POLICIES_COUNT}po|or(σ={self.data["orientations_std"]})|em(μ={self.data["emotions_mean"]}σ={self.data["emotions_std"]})|me(μ={self.data["media_conformities_mean"]}σ={self.data["media_conformities_std"]})|ba={self.data["connections_created"] - self.data["connections_destroyed"]}.dat'
+            f'-run-({AGENTS_COUNT}ag|{N_EPOCHS}ep|{self.data["n_policies"]}po|or(σ={self.data["orientations_std"]})|em(μ={self.data["emotions_mean"]}σ={self.data["emotions_std"]})|me(μ={self.data["media_conformities_mean"]}σ={self.data["media_conformities_std"]})|ba={self.data["connections_created"] - self.data["connections_destroyed"]}.dat'
         print(f'Saving snapshots data to: {filename}')
         pickle.dump(self.data, open(filename, 'wb'))
         

@@ -14,6 +14,7 @@ import time
 class Model:
 
     def __init__(self,
+                 n_policies,
                  init_connections,
                  orientations_std,
                  emotions_mean,
@@ -30,6 +31,7 @@ class Model:
         # Draw orientation, emotion and media conformity values from
         # normal distribution for all agents, then make sure to clip them to
         # boundaries
+        self.n_policies = n_policies
         agents_orientations = np.random.normal(
             INIT_ORIENTATIONS_MEAN, orientations_std, AGENTS_COUNT)
         agents_orientations = np.clip(
@@ -47,7 +49,7 @@ class Model:
         # Populate the agents array. The agents initilisation draws values
         # for their opinion array based on initial orientation and emotion.
         self.agents = [
-            Agent(i, agents_orientations[i], self.agents_emotions[i],
+            Agent(i, self.n_policies, agents_orientations[i], self.agents_emotions[i],
                   self.adjacency_matrix[i], self.media_conformities[i])
             for i in range(AGENTS_COUNT)
         ]
@@ -104,7 +106,7 @@ class Model:
 
         # Get noise from communications innacuracies
         comms_noise = np.random.normal(
-            NOISE_MEAN, NOISE_STD, (AGENTS_COUNT, POLICIES_COUNT))
+            NOISE_MEAN, NOISE_STD, (AGENTS_COUNT, self.n_policies))
         noise_influence = (comms_noise.T * (1 - self.agents_emotions)).T
 
         # Print state if required
@@ -168,7 +170,7 @@ class Model:
         self.group_opinions = np.array(
             [agent.opinions for agent in self.agents]
         )
-        self.group_opinion_strengths = np.linalg.norm(self.group_opinions, axis=1) / np.sqrt(POLICIES_COUNT)
+        self.group_opinion_strengths = np.linalg.norm(self.group_opinions, axis=1) / np.sqrt(self.n_policies)
         if VERBOSITY & V_MODEL:
             print('****************************************')
             print('*\tGroup opinions refreshed:')
@@ -203,7 +205,7 @@ class Model:
                 np.random.normal(
                     MEDIA_OUTLETS_MEANS[i],
                     MEDIA_OUTLETS_STD[i],
-                    POLICIES_COUNT
+                    self.n_policies
                 ) for i in range(MEDIA_OUTLETS_COUNT)
             ]
         )
