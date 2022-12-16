@@ -212,7 +212,7 @@ class Agent:
             own_strength = np.linalg.norm(self.opinions) / np.sqrt(len(ref_opinions))
             relative_strength = np.clip(reference_strength / own_strength, 0.5, 2)
             dissonance_factor = np.sin(2 * angle) / 2
-            rotation_angle = angle * dissonance_factor * relative_strength * (1 - self.emotion)
+            rotation_angle = angle * dissonance_factor * relative_strength
             # And do the job
             if VERBOSITY & V_AGENT:
                 print(
@@ -238,7 +238,7 @@ class Agent:
             )
             candidates_similarities.append(
                 self.get_directional_similarity(perceived_position))
-        # The vote probabilities is the opitinons similarities normalised
+        # The vote probabilities is the opinions similarities normalised
         vote_intention = candidates_similarities / \
             np.sum(candidates_similarities)
         return vote_intention
