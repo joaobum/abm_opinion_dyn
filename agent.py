@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 
 from configuration import *
@@ -24,127 +26,30 @@ class Agent:
         self.opinions = np.random.normal(
             orientation, ((1 - emotion)*(1 - (orientation + 1) / 2)), n_policies)
         self.opinions = np.clip(self.opinions, OPINION_MIN, OPINION_MAX)
+        # Opinion strength is normalised by max norm in the space
+        self.opinion_strength =  np.linalg.norm(
+            self.opinions) / np.sqrt(len(self.opinions))
 
         # Initialise zero arrays that will be updated on each iteration
-        self.agents_similarities = np.zeros(AGENTS_COUNT)
         self.agents_trust = np.zeros(AGENTS_COUNT)
         self.media_trust = np.zeros(MEDIA_OUTLETS_COUNT)
-        self.media_similarities = np.zeros(AGENTS_COUNT)
-
-    def print_state(self):
-        print('\n****************************************')
-        print(f'\nAgent {self.id}\n state:')
-        print(f'******************\nEmotion = {self.emotion}')
-        print(
-            f'******************\nMedia conformity = {self.media_conformity}')
-        print('******************\nAdjacency')
-        print_array(self.adjacency)
-        print('******************\nGroup Dissimilarities')
-        print_array(1 - self.agents_similarities)
-        print('******************\nGroup trust')
-        print_array(self.agents_trust)
-        print('******************\nMedia Dissimilarities')
-        print_array(1 - self.media_similarities)
-        print('******************\nMedia Trust')
-        print_array(self.media_trust)
-        print('\n****************************************')
         
 
-    def update_agents_trust(self, group_similarities: np.ndarray):
+    def update_agents_trust(self, group_attractions: np.ndarray):
         # Clean the current array
         self.agents_trust = np.zeros(AGENTS_COUNT)
         # Get the indexes of relevant opinions from the adjacency matrix
         connections_indexes = self.adjacency.nonzero()[0]
+        
         # If we don't have any connections, keep the zeros
         if len(connections_indexes) > 0:
-            # Variance of the trust distribution is based on emotion
-            # Agents with high emotional affectiveness on their opinon will tend to trust
-            # mostly agents that think similarly.
-            trust_variance = 1.05 - self.emotion
             # Iterate in all connections storing the normal function for the dissimilarity
             for i in connections_indexes:
-                # Dissimilarity = 1 - similarity
-                self.agents_trust[i] = normpdf(
-                    1 - group_similarities[self.id][i], trust_variance)
+                self.agents_trust[i] = group_attractions[self.id][i]
 
             # And finally normalise the trust
             self.agents_trust = self.agents_trust / np.sum(self.agents_trust)
 
-    def update_media_similarities(self, media_opinions: np.ndarray):
-        # Clean the current array
-        self.media_similarities = np.zeros(MEDIA_OUTLETS_COUNT)
-        # Iterate in all connections, getting their directional similarity
-        for i in range(MEDIA_OUTLETS_COUNT):
-            # Dissimilarity = 1 - similarity
-            self.media_similarities[i] = self.get_directional_similarity(
-                media_opinions[i])
-
-    def update_media_trust(self, media_opinions: np.ndarray):
-        # Clean the current array
-        self.media_trust = np.zeros(MEDIA_OUTLETS_COUNT)
-        # Variance of the trust distribution is based on emotion like for agents
-        trust_variance = 1.05 - self.emotion
-        # Update similarity array
-        self.update_media_similarities(media_opinions)
-        # Iterate in all outlets storing the normal function for the dissimilarity
-        for i in range(MEDIA_OUTLETS_COUNT):
-            # Dissimilarity = 1 - similarity
-            self.media_trust[i] = normpdf(
-                1 - self.media_similarities[i], trust_variance)
-
-        # And finally normalise the trust
-        self.media_trust = self.media_trust / np.sum(self.media_trust)
-
-    def update_social_network(self, group_similarities: np.ndarray, group_opinion_strengths: np.ndarray):
-        # Initialise an array of potential connection breaks
-        end_connections = []
-        # Get first connections
-        connections_indexes = self.adjacency.nonzero()[0]
-        # Now check if any of the existing connections need undoing
-        for i in connections_indexes:
-            # # The probability of endind an existing relationship is influenced
-            # # by the dissimilarity and emotional affectiveness
-            # end_prob = (1 - group_similarities[self.id][i]) * group_opinion_strengths[i] > self.emotion * group_opinion_strengths[self.id] 
-            
-            # # Then we draw from that probability, and in case true we end
-            # # the adjacency and store the value to return so we end the adjacency
-            # # on the other agent as well
-            # if np.random.choice([True, False], p=[end_prob, 1-end_prob]):
-            #     end_connections.append(i)
-                
-            if group_similarities[self.id][i] * group_opinion_strengths[i] < self.emotion * group_opinion_strengths[self.id]:
-                end_connections.append(i)
-        # Analogous behaviour for new connections
-        # Initialise an array of potential new connections
-        create_connections = []
-
-        # Grab random from population, excluding ourselves and whos already connected
-        eval_indexes = [id for id in range(AGENTS_COUNT)
-                if id not in np.append(connections_indexes, self.id)]
-        if len(eval_indexes):
-            create_evals = np.random.choice(
-                eval_indexes,
-                int(10)
-            )
-
-            # Now check if any of the existing connections need undoing
-            for i in create_evals:
-                # # The probability of creating a new connection is proportional
-                # # to similarity and the ratio of possible second degree connections
-                # # (-2 discounts the direct connection and the agent itself)
-                # create_prob = group_similarities[self.id][i] * self.emotion * group_opinion_strengths[self.id] * group_opinion_strengths[i]
-                # add_create_prob(create_prob)
-                # # Then we draw from that probability, and in case true we end
-                # # the adjacency and store the value to return so we end the adjacency
-                # # on the other agent as well
-                # if np.random.choice([True, False], p=[create_prob, 1-create_prob]):
-                #     create_connections.append(i)
-                    
-                if group_similarities[self.id][i] * group_opinion_strengths[i] > self.emotion * group_opinion_strengths[self.id]:
-                    create_connections.append(i)
-
-        # Now return the arrays so we can end/create the connection on the other involved agent
-        return create_connections, end_connections
 
     def get_angle(self, ref_opinions):
         '''
@@ -164,6 +69,23 @@ class Agent:
 
     def get_directional_similarity(self, ref_opinions):
         return 1 - (self.get_angle(ref_opinions) / np.pi)
+    
+    def get_social_attraction(self, ref_opinions, self_degree, ref_degree):
+        # The gravitational constant is defined by
+        g = (1 - self.emotion) / self.opinion_strength
+        # Directional distance is simply the similarity inverted in the range [0, 1]
+        directional_distance = 1 - self.get_directional_similarity(ref_opinions) 
+        
+        # Masses are rescaled to [0.5, 1]
+        attraction_mass = (2 - self_degree) / 2
+        ref_attraction_mass = (2 - ref_degree) / 2
+        
+        # Attraction is based on a gravitation law. With the directional distance
+        # reverse squared and the masses are the opinion centralisty attractiveness
+        # The gravitanional constant is modulated by the emotion affectiveness
+        attraction = math.exp(-(directional_distance ** 2) / (g * attraction_mass * ref_attraction_mass))
+        
+        return attraction
 
     def rotate_opinions(self, ref_opinions, angle):
         '''
@@ -216,7 +138,7 @@ class Agent:
             # And do the job
             if VERBOSITY & V_AGENT:
                 print(
-                    f'Interacting: angle = {np.degrees(angle):.2f}\tdissonance_factor = {dissonance_factor:.3f}\temotion = {self.emotion:.3f}\trotation_angle = {np.degrees(rotation_angle):.2f}')
+                    f'Interacting: angle = {np.degrees(angle):.2f}\tdissonance_factor = {dissonance_factor:.3f}\trelative_strength = {relative_strength:.3f}\trotation_angle = {np.degrees(rotation_angle):.2f}')
             self.rotate_opinions(ref_opinions, rotation_angle)
 
     def add_noise(self, noise):
@@ -225,20 +147,4 @@ class Agent:
         # Make sure we're still in range
         self.opinions = np.clip(self.opinions, OPINION_MIN, OPINION_MAX)
 
-    def get_vote_intention(self):
-        # Get the similarity to each candidate's position
-        candidates_similarities = []
-        for i in range(CANDIDATES_COUNT):
-            # The randomness is due to each agent perceiving the candidate's opinion with
-            # some variation.
-            perceived_position = np.random.normal(
-                CANDIDATES_OPINIONS_MEAN[i],
-                CANDIDATES_OPINIONS_STD[i],
-                len(self.opinions)
-            )
-            candidates_similarities.append(
-                self.get_directional_similarity(perceived_position))
-        # The vote probabilities is the opinions similarities normalised
-        vote_intention = candidates_similarities / \
-            np.sum(candidates_similarities)
-        return vote_intention
+    

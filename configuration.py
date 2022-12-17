@@ -8,7 +8,7 @@ import pathlib
 
 # Model size
 N_POLICIES = [3, 7, 15]
-AGENTS_COUNT = 100
+AGENTS_COUNT = 50
 N_EPOCHS = 1000
 
 # Data capturing
@@ -16,14 +16,15 @@ N_SNAPSHOTS = 201
 DATA_DIR = f'{pathlib.Path(__file__).parent.resolve()}/data/'
 
 # Agents initialisation
-INIT_CONNECTIONS_PROB = [0.1, 0.2]
+GLOBAL_SOCIAL_SPARSITY = [0.3, 0.5, 0.7]
+INIT_CONNECTIONS_PROB = [0.1]
 INIT_ORIENTATIONS_MEAN = 0
-INIT_ORIENTATIONS_STD = [0.15, 0.3]
-INIT_EMOTIONS_MEAN = [0.35, 0.5, 0.65]
-INIT_EMOTIONS_STD = [0.15, 0.3]
-MEDIA_CONFORMITY_MEAN = [0]
+INIT_ORIENTATIONS_STD = [0.15]
+INIT_EMOTIONS_MEAN = [0.35, 0.65]
+INIT_EMOTIONS_STD = [0.15]
+MEDIA_CONFORMITY_MEAN = [0, 0.3]
 MEDIA_CONFORMITY_STD = [0]
-INTERACTION_RATIO = 1
+INTERACTION_RATIO = [0.1, 0.3, 0.5, 0.7]
 
 # Media parameters
 MEDIA_OUTLETS_COUNT = 3
@@ -32,7 +33,7 @@ MEDIA_OUTLETS_STD = [0.1, 0.2, 0.1]
 
 # Noise
 NOISE_MEAN = 0
-NOISE_STD = 0.03
+NOISE_STD = 0.05
 
 # Candidates parameters
 CANDIDATES_COUNT = 2
@@ -52,7 +53,7 @@ MEDIA_CONFORMITY_MIN = 0
 MEDIA_CONFORMITY_MAX = 1
 
 # Random seed for consistency
-SEED = 1
+SEED = 69
 np.random.seed(SEED)
 
 # Tracing

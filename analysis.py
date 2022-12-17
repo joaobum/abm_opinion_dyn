@@ -1,5 +1,6 @@
+import glob 
 import numpy as np
-import pandas as pd
+
 import pickle
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -7,6 +8,7 @@ from datetime import datetime
 from configuration import *
 import networkx as nx
 from sklearn.decomposition import PCA
+
 
 class Analysis:
     def __init__(self, model_data=None, load_from_path=None) -> None:
@@ -30,17 +32,17 @@ class Analysis:
         self.mean_opinions = np.array(
             [np.mean(opinions) for opinions in self.opinions]
         )
+
         self.max_mean_opinions = np.max(self.mean_opinions)
         self.min_mean_opinions = np.min(self.mean_opinions)
         self.n_agents = len(self.opinions[0])
-    
-        # Unpack polls and get metrics 
+
+        # Unpack polls and get metrics
         self.vote_polls = np.array(
             [snapshot['poll'] for snapshot in self.snapshots]
         )
         self.max_vote_prob = np.max(self.vote_polls)
         self.min_vote_prob = np.min(self.vote_polls)
-        
 
         # Get graphs and metrics
         self.graphs = [
@@ -59,11 +61,9 @@ class Analysis:
         # Save snaphsots to file
         timestamp = datetime.now().strftime('%m-%d-%H.%M')
         filename = DATA_DIR + timestamp + \
-            f'-run-({AGENTS_COUNT}ag|{N_EPOCHS}ep|{self.data["n_policies"]}po|or(σ={self.data["orientations_std"]})|em(μ={self.data["emotions_mean"]}σ={self.data["emotions_std"]})|me(μ={self.data["media_conformities_mean"]}σ={self.data["media_conformities_std"]})|ba={self.data["connections_created"] - self.data["connections_destroyed"]}.dat'
+            f'-run-({AGENTS_COUNT}ag|{N_EPOCHS}ep|{self.data["n_policies"]}po|{self.data["social_sparsity"]}ss|{self.data["interaction_ratio"]}ir|or(σ={self.data["orientations_std"]})|em(μ={self.data["emotions_mean"]}σ={self.data["emotions_std"]})|me(μ={self.data["media_conformities_mean"]}σ={self.data["media_conformities_std"]})|ba={self.data["connections_balance"]}.dat'
         print(f'Saving snapshots data to: {filename}')
         pickle.dump(self.data, open(filename, 'wb'))
-        
-        title=f'{AGENTS_COUNT} agents for {N_EPOCHS} epochs conn({self.data["init_connections"]}), orientations (σ={self.data["orientations_std"]}), emotions (μ={self.data["emotions_mean"]},σ={self.data["emotions_std"]}), media (μ={self.data["media_conformities_mean"]},σ={self.data["media_conformities_std"]}) balance {self.data["connections_created"] - self.data["connections_destroyed"]}',
 
     def load_from_file(self, file_path):
         data = pickle.load(open(file_path, 'rb'))
@@ -74,7 +74,7 @@ class Analysis:
         opinions = self.opinions[step]
         # If our opinion is more than 3d, then get a PCA
         if opinions.shape[1] >= 3:
-            pca = PCA(n_components=3, random_state=0, svd_solver="auto")
+            pca = PCA(n_components=3, svd_solver="full")
             opinions = pca.fit_transform(opinions)
         edge_x = []
         edge_y = []
@@ -125,7 +125,8 @@ class Analysis:
         node_text = []
         for node, adjacencies in enumerate(graph.adjacency()):
             node_adjacencies.append(len(adjacencies[1]))
-            node_text.append(f'connections: {len(adjacencies[1])}\nopinions: {self.opinions[step][node]}')
+            node_text.append(
+                f'connections: {len(adjacencies[1])}\nopinions: {self.opinions[step][node]}')
             # node_text.append(f'opinions: {self.opinions[step][node]}')
 
         node_trace.marker.color = node_adjacencies
@@ -139,13 +140,13 @@ class Analysis:
             if len(histogram) - 1 > self.max_degree:
                 self.max_degree = len(histogram) - 1
             if np.max(histogram) > self.max_degree_count:
-                self.max_degree_count = np.max(histogram) 
-                
+                self.max_degree_count = np.max(histogram)
+
     def get_agents_mean_opinion_trace(self, step=0):
         mean_opinions = np.mean(self.opinions[step], axis=1)
         opinions_trace = go.Scatter(
             x=np.arange(0, len(mean_opinions)),
-            y=mean_opinions, 
+            y=mean_opinions,
             mode='markers',
             # hoverinfo='text',
             # marker=dict(
@@ -164,9 +165,8 @@ class Analysis:
             # ),
             showlegend=False
         )
-        
-        return [opinions_trace]
 
+        return [opinions_trace]
 
     def get_graph_histogram_trace(self, step=0):
         graph = self.graphs[step]
@@ -175,7 +175,7 @@ class Analysis:
         for degree in range(len(histogram)):
             degree_count = histogram[degree]
             converted_histogram.extend([degree for i in range(degree_count)])
-            
+
         histogram_trace = go.Histogram(
             x=converted_histogram,
             histnorm='percent',
@@ -238,7 +238,7 @@ class Analysis:
         return candidates_traces
 
     def get_mean_opinions_trace(self, step=0):
-        
+
         mean_opinions_trace = go.Scatter(
             x=self.epochs,
             y=self.mean_opinions,
@@ -249,7 +249,7 @@ class Analysis:
             showlegend=False
         )
         return [mean_opinions_trace]
-    
+
     def get_pca_snapshot(self):
         opinions_list = [self.agents[i].opinions for i in range(self.n_agents)]
         opinion_array = np.array(opinions_list)
@@ -258,6 +258,7 @@ class Analysis:
         return components, pca.explained_variance_ratio_
 
     def plot_full_analysis(self):
+        print('Plotting full analysis...')
         fig = make_subplots(
             rows=2, cols=2,
             specs=[[{'type': 'xy'}, {'type': 'xy'}],
@@ -267,7 +268,7 @@ class Analysis:
         # For complex figures with custom rations and axes,
         # layout must be set in low-level
         layout = dict(
-            title=f'{AGENTS_COUNT} agents for {N_EPOCHS} epochs conn({self.data["init_connections"]}), orientations (σ={self.data["orientations_std"]}), emotions (μ={self.data["emotions_mean"]},σ={self.data["emotions_std"]}), media (μ={self.data["media_conformities_mean"]},σ={self.data["media_conformities_std"]}) balance {self.data["connections_created"] - self.data["connections_destroyed"]}',
+            title=f'{AGENTS_COUNT} agents, {self.data["n_policies"]} policies, sparsity={self.data["social_sparsity"]}, interact={self.data["interaction_ratio"]}, conn={self.data["init_connections"]}, orientations=(σ={self.data["orientations_std"]}), emotions (μ={self.data["emotions_mean"]},σ={self.data["emotions_std"]}), media (μ={self.data["media_conformities_mean"]},σ={self.data["media_conformities_std"]}) balance {self.data["connections_balance"]}',
             xaxis1={
                 # 'domain': [0, 0.45],
                 'anchor': 'y1',
@@ -323,7 +324,7 @@ class Analysis:
                 'title': 'Ratio [%]',
                 'range': [0, self.max_degree_count/self.n_agents * 100 + 10]
             },
-            
+
             margin={
                 't': 50,
                 'b': 50,
@@ -423,13 +424,14 @@ class Analysis:
         )
 
         # Create initial plots, the same order here needs to be followed in the frames array
-        plot_rows =     [1,     2,      2,      2,      2,      1,      1,      2]
-        plot_cols =     [1,     1,      1,      1,      1,      2,      2,      2]
-        secondary_ys =  [False, False,  False,  False,  True,  False,   False,  False]
+        plot_rows = [1,     2,      2,      2,      2,      1,      1,      2]
+        plot_cols = [1,     1,      1,      1,      1,      2,      2,      2]
+        secondary_ys = [False, False,  False,
+                        False,  True,  False,   False,  False]
         fig.add_traces((self.get_agents_mean_opinion_trace() +
                         self.get_vote_polls_traces() +
                         self.get_mean_opinions_trace() +
-                        self.get_graph_density_traces()+
+                        self.get_graph_density_traces() +
                         self.get_graph_histogram_trace()),
                        rows=plot_rows,
                        cols=plot_cols,
@@ -443,7 +445,7 @@ class Analysis:
             data=(self.get_agents_mean_opinion_trace(step) +
                   self.get_vote_polls_traces(step) +
                   self.get_mean_opinions_trace(step) +
-                  self.get_graph_density_traces(step)+
+                  self.get_graph_density_traces(step) +
                   self.get_graph_histogram_trace(step)),
             # Using the plot rows from the initial figure guarantees consistency
             traces=list(range(len(plot_rows)))
@@ -451,3 +453,139 @@ class Analysis:
         fig.update_layout(layout)
         fig.update(frames=frames)
         fig.show()
+
+    def plot_social_network(self):
+        print('Plotting social network...')
+        fig = go.Figure(
+            data=self.get_graph_network_traces(),
+            layout=go.Layout(
+                title=f'{AGENTS_COUNT} agents, {self.data["n_policies"]} policies, sparsity={self.data["social_sparsity"]}, interact={self.data["interaction_ratio"]}, conn={self.data["init_connections"]}, orientations=(σ={self.data["orientations_std"]}), emotions (μ={self.data["emotions_mean"]},σ={self.data["emotions_std"]}), media (μ={self.data["media_conformities_mean"]},σ={self.data["media_conformities_std"]}) balance {self.data["connections_balance"]}',
+                margin={
+                    't': 50,
+                    'b': 50,
+                    'l': 50,
+                    'r': 50
+                },
+                updatemenus=[{
+                    'buttons': [
+                        {
+                            'args': [
+                                [str(i) for i in range(self.n_snapshots)],
+                                {
+                                    'frame': {
+                                        'duration': 500.0,
+                                        'redraw': True
+                                    },
+                                    'fromcurrent': True,
+                                    'transition': {
+                                        'duration': 500,
+                                        'easing': 'linear'
+                                    }
+                                }
+                            ],
+                            'label': 'Play',
+                            'method': 'animate'
+                        },
+                        {
+                            'args': [
+                                [None],
+                                {
+                                    'frame': {
+                                        'duration': 0,
+                                        'redraw': True
+                                    },
+                                    'mode': 'immediate',
+                                    'transition': {
+                                        'duration': 0
+                                    }
+                                }
+                            ],
+                            'label': 'Pause',
+                            'method': 'animate'
+                        }
+                    ],
+                    'direction': 'left',
+                    'pad': {
+                        'r': 10,
+                        't': 85
+                    },
+                    'showactive': True,
+                    'type': 'buttons',
+                    'x': 0.1,
+                    'y': 0,
+                    'xanchor': 'right',
+                    'yanchor': 'top'
+                }],
+                sliders=[{
+                    'yanchor': 'top',
+                    'xanchor': 'left',
+                    'currentvalue': {
+                        'font': {
+                            'size': 16
+                        },
+                        'prefix': 'Epoch: ',
+                        'visible': True,
+                        'xanchor': 'right'
+                    },
+                    'pad': {
+                        'b': 10,
+                        't': 50
+                    },
+                    'len': 0.9,
+                    'x': 0.1,
+                    'y': 0,
+                    'steps': [
+                        {
+                            'args': [
+                                [str(i)],
+                                {
+                                    'frame': {
+                                        'duration': 500.0,
+                                        'easing': 'linear',
+                                        'redraw': True
+                                    },
+                                    'transition': {
+                                        'duration': 0,
+                                        'easing': 'linear'
+                                    }
+                                }
+                            ],
+                            'label': str(self.epochs[i]),
+                            'method': 'animate'
+                        }
+                        for i in range(self.n_snapshots)
+                    ]
+                }]
+            ),
+            frames=[dict(
+                name=str(step),
+                # Tracing needs to be in the same order as the initial figures
+                data=self.get_graph_network_traces(step)
+            ) for step in range(self.n_snapshots)]
+        )
+
+        fig.show()
+
+def run_data_analyser(data_dir: str):
+    user_input = ''
+    while True:
+        file_list = glob.glob(f'{data_dir}/*.dat')
+        print('\n********************************************************************************')
+        user_input = input(f'There are {len(file_list)} data files. Choose index and file name filter index[,filter] [optional]: ')
+        
+        if user_input == 'q':
+            break
+        
+        index = int(user_input.split(',')[0])
+        try:
+            file_filter = user_input.split(',')[1]
+        except KeyError:
+            file_filter = None
+        
+        if file_filter is not None:
+            file_list = glob.glob(f'{data_dir}/*{file_filter}*.dat')
+        
+        analysis = Analysis(load_from_path=file_list[index])
+        analysis.plot_full_analysis()
+        analysis.plot_social_network()
+        
