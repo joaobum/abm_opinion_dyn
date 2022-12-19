@@ -70,15 +70,14 @@ class Agent:
     def get_directional_similarity(self, ref_opinions):
         return 1 - (self.get_angle(ref_opinions) / np.pi)
     
-    def get_social_attraction(self, ref_opinions, self_degree, ref_degree):
+    def get_social_attraction(self, ref_opinions, self_degree=1, ref_degree=1):
         # The gravitational constant is defined by
-        g = (1 - self.emotion) / self.opinion_strength
+        g = (1 - self.emotion) * (1 - min(0.95, self.opinion_strength))
         # Directional distance is simply the similarity inverted in the range [0, 1]
         directional_distance = 1 - self.get_directional_similarity(ref_opinions) 
         
-        # Masses are rescaled to [0.5, 1]
-        attraction_mass = (2 - self_degree) / 2
-        ref_attraction_mass = (2 - ref_degree) / 2
+        attraction_mass = (1 + self_degree) / 2
+        ref_attraction_mass = (1 + ref_degree) / 2
         
         # Attraction is based on a gravitation law. With the directional distance
         # reverse squared and the masses are the opinion centralisty attractiveness

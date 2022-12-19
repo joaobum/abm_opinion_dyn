@@ -1,16 +1,10 @@
-from datetime import datetime
-from itertools import combinations
-
 import numpy as np
-import pickle
 from sklearn.decomposition import PCA
 import networkx.generators.random_graphs as random_graphs
 import networkx as nx
 
 from configuration import *
 from agent import Agent
-import time
-
 
 class Model:
 
@@ -59,8 +53,6 @@ class Model:
                   self.adjacency_matrix[i], self.media_conformities[i])
             for i in range(AGENTS_COUNT)
         ]
-        # Create an array of pair sets of all possible agent's combination
-        self.agents_pairs = list(combinations(range(AGENTS_COUNT), 2))
 
         # Initialise dynamic aggregation arrays
         self.group_attractions = np.zeros((AGENTS_COUNT, AGENTS_COUNT))
@@ -84,6 +76,8 @@ class Model:
             'media_conformities_mean': media_conformities_mean,
             'media_conformities_std': media_conformities_std,
             'agents_emotions': self.agents_emotions,
+            'candidates_opinions': CANDIDATES_OPINIONS_MEAN,
+            'seed': SEED,
             'connections_balance': 0,
             'snapshots': []
         }
@@ -262,11 +256,7 @@ class Model:
             for media in range(MEDIA_OUTLETS_COUNT):
                 # And calculate the attraction of agent towards media
                 self.media_attractions[agent][media] = \
-                    self.agents[agent].get_social_attraction(
-                        self.media_opinions[media],
-                        1,
-                        1 
-                )      
+                    self.agents[agent].get_social_attraction(self.media_opinions[media])      
 
     def refresh_media_trust(self):
         # Media trust is calculated by row normalising the attraction values
@@ -307,11 +297,14 @@ class Model:
             for candidate in range(CANDIDATES_COUNT):
                 # And calculate the attraction of agent towards each candidate
                 candidate_attractions[agent][candidate] = \
-                    self.agents[agent].get_social_attraction(
-                        candidates_opinions[candidate],
-                        1,
-                        1 
-                )  
+                    self.agents[agent].get_social_attraction(candidates_opinions[candidate])  
+
+        # # Poll is based on agents choosing the candidate they're most
+        # # attracted to
+        # agents_votes = list(np.argmax(candidate_attractions, axis=1))
+        # vote_count = [agents_votes.count(i) for i in range(CANDIDATES_COUNT)]
+        # poll = vote_count / np.sum(vote_count)
+        
         # The poll is the normalised mean of attractions
         mean_attractions = np.mean(candidate_attractions, axis=0)
         poll = mean_attractions / np.sum(mean_attractions)

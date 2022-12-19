@@ -29,7 +29,7 @@ def instantiate_simulation(config):
     if config['save_to_file']:
         analysis.save_to_file()
     if config['plot_analysis']:
-        analysis.plot_social_network()
+        # analysis.plot_social_network()
         analysis.plot_full_analysis()
 
 
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     
     # config = {
     #     'n_policies': 3,
-    #     'social_sparsity': 0.5,
+    #     'social_sparsity': 0.75,
     #     'interaction_ratio': 0.3,
     #     'init_connections': 0.15,
     #     'orientations_std': 0.15,
@@ -45,15 +45,15 @@ if __name__ == "__main__":
     #     'emotions_std': 0.2,
     #     'media_conformities_mean': 0.2,
     #     'media_conformities_std': 0.05,
-    #     'save_to_file': False,
+    #     'save_to_file': True,
     #     'plot_analysis': True
     # }
     
     # instantiate_simulation(config)
 
     # Build the config list based on all combinations of each parameter's list
-    save_to_file = False
-    plot_analysis = True
+    save_to_file = True
+    plot_analysis = False
     config_list = []
 
     for n_policies in N_POLICIES:
