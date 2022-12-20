@@ -1,14 +1,19 @@
+import os 
+import time
+import datetime
+
 import numpy as np
-from sklearn.decomposition import PCA
 import networkx.generators.random_graphs as random_graphs
 import networkx as nx
 
 from configuration import *
 from agent import Agent
 
+
 class Model:
 
     def __init__(self,
+                 n_epochs,
                  n_policies,
                  social_sparsity,
                  interaction_ratio,
@@ -19,32 +24,47 @@ class Model:
                  media_conformities_mean,
                  media_conformities_std):
 
-        # Initialise social network
+        # Store model parameters
+        self.n_epochs = n_epochs
+        self.n_policies = n_policies
         self.social_sparsity = social_sparsity
         self.interaction_ratio = interaction_ratio
         self.init_connections_prob = init_connections
+
+        # Initialise social network
         self.social_graph = random_graphs.erdos_renyi_graph(
             AGENTS_COUNT, init_connections, seed=SEED)
         self.adjacency_matrix = nx.to_numpy_array(self.social_graph)
+        self.connections_balance = 0
 
         # Initialise agents
         # Draw orientation, emotion and media conformity values from
-        # normal distribution for all agents, then make sure to clip them to
-        # boundaries
-        self.n_policies = n_policies
-        agents_orientations = np.random.normal(
-            INIT_ORIENTATIONS_MEAN, orientations_std, AGENTS_COUNT)
+        # normal distribution for all agents, then make sure to clip
+        # them to boundaries
         agents_orientations = np.clip(
-            agents_orientations, ORIENTATION_MIN, ORIENTATION_MAX)
-        # We store the values for emotions and conformities
-        self.agents_emotions = np.random.normal(
-            emotions_mean, emotions_std, AGENTS_COUNT)
+            np.random.normal(
+                INIT_ORIENTATIONS_MEAN, orientations_std, AGENTS_COUNT
+            ),
+            ORIENTATION_MIN,
+            ORIENTATION_MAX
+        )
+
+        # Draw the values for emotions and media conformities,
+        # clip to range and store
         self.agents_emotions = np.clip(
-            self.agents_emotions, EMOTION_MIN, EMOTION_MAX)
-        self.media_conformities = np.random.normal(
-            media_conformities_mean, media_conformities_std, AGENTS_COUNT)
+            np.random.normal(
+                emotions_mean, emotions_std, AGENTS_COUNT
+            ),
+            EMOTION_MIN,
+            EMOTION_MAX
+        )
         self.media_conformities = np.clip(
-            self.media_conformities, MEDIA_CONFORMITY_MIN, MEDIA_CONFORMITY_MAX)
+            np.random.normal(
+                media_conformities_mean, media_conformities_std, AGENTS_COUNT
+            ),
+            MEDIA_CONFORMITY_MIN,
+            MEDIA_CONFORMITY_MAX
+        )
 
         # Populate the agents array. The agents initialisation draws values
         # for their opinion array based on initial orientation and emotion.
@@ -64,7 +84,7 @@ class Model:
         # Update media attraction for all agents
         self.update_media_attractions(range(AGENTS_COUNT))
 
-        # Set model data collection dictionary
+        # Set model data collection dictionary and snapshot epochs
         self.data = {
             'n_policies': n_policies,
             'social_sparsity': social_sparsity,
@@ -81,7 +101,8 @@ class Model:
             'connections_balance': 0,
             'snapshots': []
         }
-        self.connections_balance = 0
+        self.snapshot_epochs = np.linspace(
+            0, n_epochs, N_SNAPSHOTS).astype(int)
 
     def step(self):
         # We first select a random sample of the agent's pool without replacement
@@ -153,7 +174,7 @@ class Model:
         self.update_agents_attractions(active_agents)
         # Update media attraction for active agents
         self.update_media_attractions(active_agents)
-        
+
         # print(f'2  ->  {time.perf_counter() - tic}')
 
         #######################################################################
@@ -182,7 +203,7 @@ class Model:
                         self.agents[i].adjacency[j] = 0
                         self.agents[j].adjacency[i] = 0
                         self.data['connections_balance'] -= 1
-                    
+
         # Update the adjacency matrix
         self.refresh_social_graph()
         # print(f'3  ->  {time.perf_counter() - tic}')
@@ -201,7 +222,6 @@ class Model:
             print_array(self.group_opinions)
             print_array(self.group_opinion_strengths)
 
-
     def update_agents_attractions(self, active_agents):
         # Iterate over all active agents
         for active_agent in active_agents:
@@ -214,7 +234,8 @@ class Model:
                     self.agents[active_agent].get_social_attraction(
                         self.group_opinions[reference_agent],
                         self.social_graph.degree[active_agent] / AGENTS_COUNT,
-                        self.social_graph.degree[reference_agent] / AGENTS_COUNT
+                        self.social_graph.degree[reference_agent] /
+                    AGENTS_COUNT
                 )
 
     def refresh_group_trust(self):
@@ -256,11 +277,13 @@ class Model:
             for media in range(MEDIA_OUTLETS_COUNT):
                 # And calculate the attraction of agent towards media
                 self.media_attractions[agent][media] = \
-                    self.agents[agent].get_social_attraction(self.media_opinions[media])      
+                    self.agents[agent].get_social_attraction(
+                        self.media_opinions[media])
 
     def refresh_media_trust(self):
         # Media trust is calculated by row normalising the attraction values
-        self.media_trust = self.media_attractions / np.sum(self.media_attractions, axis=1)[:,None]
+        self.media_trust = self.media_attractions / \
+            np.sum(self.media_attractions, axis=1)[:, None]
         if VERBOSITY & V_MODEL:
             print('****************************************')
             print('*\tMedia trust refreshed:')
@@ -271,7 +294,7 @@ class Model:
             [agent.adjacency for agent in self.agents]
         )
         self.social_graph = nx.from_numpy_matrix(self.adjacency_matrix)
-        
+
         if VERBOSITY & V_MODEL:
             print('****************************************')
             print('*\tAdjacency matrix refreshed:')
@@ -290,49 +313,50 @@ class Model:
         )
         candidates_opinions = np.clip(
             candidates_opinions, OPINION_MIN, OPINION_MAX)
-        
+
         candidate_attractions = np.zeros((AGENTS_COUNT, CANDIDATES_COUNT))
         # All agents have a voice
         for agent in range(AGENTS_COUNT):
             for candidate in range(CANDIDATES_COUNT):
                 # And calculate the attraction of agent towards each candidate
                 candidate_attractions[agent][candidate] = \
-                    self.agents[agent].get_social_attraction(candidates_opinions[candidate])  
+                    self.agents[agent].get_social_attraction(
+                        candidates_opinions[candidate])
 
         # # Poll is based on agents choosing the candidate they're most
         # # attracted to
         # agents_votes = list(np.argmax(candidate_attractions, axis=1))
         # vote_count = [agents_votes.count(i) for i in range(CANDIDATES_COUNT)]
         # poll = vote_count / np.sum(vote_count)
-        
+
         # The poll is the normalised mean of attractions
         mean_attractions = np.mean(candidate_attractions, axis=0)
         poll = mean_attractions / np.sum(mean_attractions)
 
         return poll
 
-    def run(self, n_epochs: int):
-        snapshot_epochs = np.linspace(0, n_epochs, N_SNAPSHOTS).astype(int)
-        print('\n********************************************************************************\n')
-        print(f'Starting model run for {n_epochs} epochs.\n')
-
+    def run(self):
+        print('\n********************************************************************************')
+        print(f'PID {os.getpid()} -> Starting model run.\n')
+        tic = time.perf_counter()
         # Start epoch from 0 so we save the initial state before stepping
-        for epoch in range(0, n_epochs + 1):
+        for epoch in range(0, self.n_epochs + 1):
             # Print status on each 10%
-            if epoch % (n_epochs / 10) == 0:
-                print(f'Run progress:\t{int(epoch/n_epochs * 100)}%')
+            if epoch % (self.n_epochs / 10) == 0:
+                print(f'Run progress:\t{int(epoch/self.n_epochs * 100)}%')
 
-            # Store snapshots for plotting
-            if epoch in snapshot_epochs:
+            # In case this is a snapshot epoch, store data for analysis
+            if epoch in self.snapshot_epochs:
                 poll = self.get_election_poll()
                 self.data['snapshots'].append({
                     'epoch': epoch,
                     'group_opinions': self.group_opinions.copy(),
-                    'group_attractions': self.group_attractions.copy(),
-                    'media_opinions': self.media_opinions.copy(),
                     'adjacency': self.adjacency_matrix.copy(),
                     'poll': poll
                 })
 
             # Step the model
             self.step()
+            
+        print(f'PID {os.getpid()} -> Simulation concluded in {datetime.timedelta(seconds=(time.perf_counter()-tic))}.')
+        print('********************************************************************************\n')

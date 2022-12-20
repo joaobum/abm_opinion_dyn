@@ -1,17 +1,13 @@
-import glob
-import numpy as np
 from multiprocessing import Pool
-import os
+import glob
 
+import numpy as np
 import pickle
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from datetime import datetime
 from configuration import *
 import networkx as nx
 from sklearn.decomposition import PCA
-from sklearn.cluster import AffinityPropagation, KMeans
-
 
 class Analysis:
     def __init__(self, model_data=None, load_from_path=None) -> None:
@@ -25,7 +21,7 @@ class Analysis:
         self.snapshots = self.data['snapshots']
         self.n_snapshots = len(self.snapshots)
 
-        # Store array of epochs
+        # Store array of epoch values
         self.epochs = np.array(
             [snapshot['epoch'] for snapshot in self.snapshots]
         )
@@ -34,15 +30,16 @@ class Analysis:
         self.opinions = np.array(
             [snapshot['group_opinions'] for snapshot in self.snapshots]
         )
+        self.n_agents = len(self.opinions[0])
         self.mean_opinions = np.array(
             [np.mean(opinions) for opinions in self.opinions]
         )
-        # self.compute_cluster_count()
-        # print(self.cluster_count)
-
         self.max_mean_opinions = np.max(self.mean_opinions)
         self.min_mean_opinions = np.min(self.mean_opinions)
-        self.n_agents = len(self.opinions[0])
+        self.mean_opinions_margin = abs((self.max_mean_opinions + self.min_mean_opinions) / 2) * 0.1
+        # Initialise min and max to set plot boundaries (will be tweaked in case of PCA)
+        self.o_max = [1, 1, 1]
+        self.o_min = [-1, -1, -1]
 
         # Unpack polls and get metrics
         self.vote_polls = np.array(
@@ -57,17 +54,24 @@ class Analysis:
             for i in range(self.n_snapshots)
         ]
         self.graphs_densities = np.array(
-            [nx.density(graph) for graph in self.graphs]
+            [nx.average_clustering(graph) for graph in self.graphs]
         )
+        
+        self.graphs_densities = np.array(
+            [nx.average_clustering(graph) for graph in self.graphs]
+        )
+        self.compute_communities()
         self.max_density = np.max(self.graphs_densities)
         self.max_degree = 0
         self.max_degree_count = 0
         self.get_max_degree()
+        
+        
 
     def save_to_file(self):
         # Save snaphsots to file
         self.file_path = DATA_DIR + \
-            f'run-(ag={self.n_agents}|ep={N_EPOCHS}|po={self.data["n_policies"]}|ss={self.data["social_sparsity"]}|ir={self.data["interaction_ratio"]}|or={self.data["orientations_std"]}|em(μ={self.data["emotions_mean"]}σ={self.data["emotions_std"]})|me(μ={self.data["media_conformities_mean"]}σ={self.data["media_conformities_std"]})|ba={self.data["connections_balance"]}|ca={str(self.data["candidates_opinions"]).replace(" ", "")}|se={self.data["seed"]}.dat'
+            f'run-(ag={self.n_agents}|ep={N_EPOCHS}|po={self.data["n_policies"]}|ss={self.data["social_sparsity"]}|ir={self.data["interaction_ratio"]}|or={self.data["orientations_std"]}|em(μ={self.data["emotions_mean"]}σ={self.data["emotions_std"]})|me(μ={self.data["media_conformities_mean"]}σ={self.data["media_conformities_std"]})|ba={self.data["connections_balance"]}|ca={str(self.data["candidates_opinions"]).replace(" ", "")}|se={self.data["seed"]}|co={self.communities_count[-1]}|ou={int(self.community_outliers[-1])}.dat'
         print(f'Saving snapshots data to: {self.file_path}')
         pickle.dump(self.data, open(self.file_path, 'wb'))
 
@@ -75,41 +79,32 @@ class Analysis:
         data = pickle.load(open(file_path, 'rb'))
         self.data = data
         self.file_path = file_path
-        
-    def compute_cluster_count(self):
-        
-        # Create an empty dictionary to save the within cluster sum of square values
-        self.cluster_count = []
-        for opinions_snapshot in self.opinions:
-            
-            # We initialise the within cluster sum of squares array
-            wcss = np.zeros(10)
-            # Look through the number of clusters
-            for i in range(10):
-                # Run kmeans model
-                kmeans = KMeans(n_clusters=i+1, random_state=0).fit(opinions_snapshot)
-                #Sum of squared distances of samples to their closest cluster center.
-                wcss[i] = (kmeans.inertia_)
-                
-            # We are interested in the biggest decay of wcss, so we take the diff
-            diff = np.diff(wcss)
-            weighted_diff = 0
-            # And now caculate the index by weighting the i+2 index by the diffs
-            for i in range(len(diff)):
-                weighted_diff += (i + 1) * diff[i]
-            
-            
-            # clustering = AffinityPropagation(preference=0.01,random_state=SEED).fit(opinions_snapshot)
-            self.cluster_count.append(np.argmin(diff) + 1)
-            
 
+    def compute_communities(self):
+        self.min_community_size = int(self.n_agents * 0.05)
+        self.communities_count = []
+        self.community_outliers = []
+        for graph in self.graphs:
+            communities = [len(c) for c in list(nx.connected_components(graph))]
+            filtered_in = list(filter(lambda community_size: community_size >= self.min_community_size, communities))
+            filtered_out = list(filter(lambda community_size: community_size < self.min_community_size, communities))
+            self.communities_count.append(len(filtered_in))
+            self.community_outliers.append(np.sum(filtered_out))
+            
+        self.max_communities = max(self.communities_count)
+            
     def get_graph_network_traces(self, step=0):
         graph = self.graphs[step]
         opinions = self.opinions[step]
         # If our opinion is more than 3d, then get a PCA
-        if opinions.shape[1] >= 3:
+        if opinions.shape[1] > 3:
             pca = PCA(n_components=3, svd_solver="full")
             opinions = pca.fit_transform(opinions)
+            self.o_max = [max(self.o_max[i], np.max(opinions[:, i]))
+                          for i in range(3)]
+            self.o_min = [min(self.o_min[i], np.min(opinions[:, i]))
+                          for i in range(3)]
+
         edge_x = []
         edge_y = []
         edge_z = []
@@ -245,21 +240,29 @@ class Analysis:
         )
 
         return [density_trace, epoch_reference]
-    
-    def get_cluster_count_trace(self, step=0):
-        
-        density_trace = go.Scatter(
+
+    def get_community_traces(self, step=0):
+        communities_trace = go.Scatter(
             x=self.epochs,
-            y=self.graphs_densities,
+            y=self.communities_count,
             mode='lines',
             line={
-                'color': 'black'
+                'color': 'darkgreen'
+            },
+            showlegend=False
+        )
+        outliers_trace = go.Scatter(
+            x=self.epochs,
+            y=self.community_outliers,
+            mode='lines',
+            line={
+                'color': 'red'
             },
             showlegend=False
         )
         epoch_reference = go.Scatter(
             x=[self.epochs[step], self.epochs[step]],
-            y=[0, 1],
+            y=[0, self.max_communities],
             mode='lines',
             line={
                 'color': 'grey',
@@ -268,7 +271,7 @@ class Analysis:
             showlegend=False
         )
 
-        return [density_trace, epoch_reference]
+        return [communities_trace, epoch_reference, outliers_trace]
 
     def get_vote_polls_traces(self, step=0):
         candidates_traces = []
@@ -279,7 +282,7 @@ class Analysis:
                     y=self.vote_polls[:, i] * 100,
                     mode='lines',
                     marker=dict(color=[i]),
-                    name=f'Candidate {i}'
+                    name=f'Cd σ={self.data["candidates_opinions"][i]}'
                 )
             )
         epoch_reference = go.Scatter(
@@ -323,11 +326,76 @@ class Analysis:
             print('Saving full analysis...')
 
         fig = make_subplots(
-            rows=2, cols=2,
-            specs=[[{'is_3d': True}, {'type': 'xy'}],
-                   [{'type': 'bar'}, {'type': 'xy', 'secondary_y': True}]]
+            rows=3, cols=2,
+            specs=[[{'is_3d': True},    {'type': 'xy', 'secondary_y': True}],
+                   [None,               {'type': 'xy', 'secondary_y': True}],
+                   [None,               {'type': 'xy', 'secondary_y': True}]]
         )
 
+        # Create initial plots, the same order here needs to be followed in the frames array
+        plot_rows = [
+            # Social network
+            1, 1, 
+            # Histogram 
+            3, 
+            # Graph
+            2, 2, 2,
+            # Voting
+            1, 1]
+        plot_cols = [
+            # Social network
+            1, 1, 
+            # Histogram 
+            2, 
+            # Graph
+            2, 2, 2,
+            # Voting
+            2, 2]
+        secondary_ys = [
+            # Social network
+            False, False, 
+            # Histogram 
+            False, 
+            # Graph
+            False, False, True,
+            # Voting
+            True, False]
+        # As we have a variable number of candidates, we need to
+        # manually extend the lists
+        candidates_rows = [1] * len(self.data['candidates_opinions'])
+        plot_rows.extend(candidates_rows)
+        candidates_cols = [2] * len(self.data['candidates_opinions'])
+        plot_cols.extend(candidates_cols)
+        candidates_ys = [False] * len(self.data['candidates_opinions'])
+        secondary_ys.extend(candidates_ys)
+
+        fig.add_traces((self.get_graph_network_traces() +
+                        self.get_graph_histogram_trace() +
+                        # self.get_graph_density_traces() +
+                        self.get_community_traces() + 
+                        self.get_mean_opinions_trace() +
+                        self.get_vote_polls_traces()),
+                       rows=plot_rows,
+                       cols=plot_cols,
+                       secondary_ys=secondary_ys
+                       )
+
+        # Then add all animation frames
+        frames = [dict(
+            name=str(step),
+            # Tracing needs to be in the same order as the initial figures
+            data=(self.get_graph_network_traces(step) +
+                  self.get_graph_histogram_trace(step) +
+                #   self.get_graph_density_traces(step) +
+                  self.get_community_traces(step) + 
+                  self.get_mean_opinions_trace(step) +
+                  self.get_vote_polls_traces(step)
+                  ),
+            # Using the plot rows from the initial figure guarantees consistency
+            traces=list(range(len(plot_rows)))
+        ) for step in range(self.n_snapshots)]
+        fig.update(frames=frames)
+        
         # For complex figures with custom rations and axes,
         # layout must be set in low-level
         layout = dict(
@@ -335,63 +403,68 @@ class Analysis:
             scene={
                 'xaxis': {
                     'title': 'Policy 1',
-                    'range': [-1, 1]
+                    'range': [self.o_min[0], self.o_max[0]]
                 },
                 'yaxis': {
                     'title': 'Policy 2',
-                    'range': [-1, 1]
+                    'range': [self.o_min[1], self.o_max[1]]
                 },
                 'zaxis': {
                     'title': 'Policy 3',
-                    'range': [-1, 1]
+                    'range': [self.o_min[2], self.o_max[2]]
                 },
                 'domain_x': [0, 0.5],
                 'domain_y': [0, 1]
             },
             scene_aspectmode='cube',
             xaxis1={
-                'domain': [0.6, 0.95],
+                # 'domain': [0.6, 0.95],
                 'anchor': 'y1',
-                'range': [0, self.epochs[-1]],
-                'title': 'Epoch'
-            },
-            yaxis1={
-                'domain': [0.4, 0.69],
-                'anchor': 'x1',
-                'title': 'Graph Density',
-                'range': [0, self.max_density + 0.2]
-            },
-            xaxis2={
-                'domain': [0.6, 0.95],
-                'anchor': 'y2',
-                'title': 'Node Degree',
-                'range': [0, self.max_degree]
-            },
-            yaxis2={
-                'domain': [0.0, 0.3],
-                'anchor': 'x2',
-                'title': 'Ratio [%]',
-                'range': [0, self.max_degree_count/self.n_agents * 100 + 10]
-            },
-            xaxis3={
-                'domain': [0.6, 0.95],
-                'anchor': 'y3',
                 'title': 'Epoch',
                 'range': [0, self.epochs[-1]],
                 'visible': False
             },
-            yaxis3={
-                'domain': [0.71, 1.0],
-                'anchor': 'x3',
+            yaxis1={
+                'domain': [0.705, 1.0],
+                'anchor': 'x1',
                 'title': 'Vote probability [%]',
                 'range': [self.min_vote_prob*100*0.9, self.max_vote_prob*100*1.1]
+            },
+            yaxis2={
+                'anchor': 'x1',
+                'title': 'Mean opinion',
+                'range': [self.min_mean_opinions - self.mean_opinions_margin, self.max_mean_opinions + self.mean_opinions_margin]
+            },
+            xaxis2={
+                # 'domain': [0.6, 0.95],
+                'anchor': 'y3',
+                'range': [0, self.epochs[-1]],
+                'title': 'Epoch'
+            },
+            yaxis3={
+                'domain': [0.4, 0.695],
+                'anchor': 'x3',
+                'title': 'Communities',
+                # 'range': [0, self.max_density + 0.2]
             },
             yaxis4={
                 'anchor': 'x3',
                 'overlaying': 'y3',
-                'title': 'Mean opinion',
-                'range': [self.min_mean_opinions*0.9, self.max_mean_opinions*1.1],
+                'title': 'Outliers',
+                # 'range': [self.min_mean_opinions - self.mean_opinions_margin, self.max_mean_opinions + self.mean_opinions_margin],
                 'side': 'right'
+            },
+            xaxis3={
+                # 'domain': [0.6, 0.95],
+                'anchor': 'y5',
+                'title': 'Node Degree',
+                'range': [0, self.max_degree]
+            },
+            yaxis5={
+                # 'domain': [0.0, 0.3],
+                'anchor': 'x4',
+                'title': 'Ratio [%]',
+                'range': [0, self.max_degree_count/self.n_agents * 100 + 10]
             },
             margin={
                 't': 50,
@@ -491,45 +564,6 @@ class Analysis:
             }]
         )
         fig.update_layout(layout)
-
-        # Create initial plots, the same order here needs to be followed in the frames array
-        
-        plot_rows = [1, 1, 2, 1, 1, 2, 2]
-        plot_cols = [1, 1, 1, 2, 2, 2, 2]
-        secondary_ys = [False, False, False, False,
-                        False, True]
-        # As we have a variable number of candidates, we need to 
-        # manually extend the lists
-        candidates_plots = [2] * len(self.data['candidates_opinions'])
-        plot_rows.extend(candidates_plots)
-        plot_cols.extend(candidates_plots)
-        candidates_ys = [False] * len(self.data['candidates_opinions'])
-        secondary_ys.extend(candidates_ys)
-        
-        fig.add_traces((self.get_graph_network_traces() +
-                        self.get_graph_histogram_trace() +
-                        self.get_graph_density_traces() +
-                        self.get_mean_opinions_trace() +
-                        self.get_vote_polls_traces()),
-                       rows=plot_rows,
-                       cols=plot_cols,
-                       secondary_ys=secondary_ys
-                       )
-
-        # Then add all animation frames
-        frames = [dict(
-            name=str(step),
-            # Tracing needs to be in the same order as the initial figures
-            data=(self.get_graph_network_traces(step) +
-                  self.get_graph_histogram_trace(step) +
-                  self.get_graph_density_traces(step) +
-                  self.get_mean_opinions_trace(step) +
-                  self.get_vote_polls_traces(step)
-                  ),
-            # Using the plot rows from the initial figure guarantees consistency
-            traces=list(range(len(plot_rows)))
-        ) for step in range(self.n_snapshots)]
-        fig.update(frames=frames)
 
         if save:
             html_file = DATA_DIR + '/html/' + \
@@ -702,7 +736,7 @@ def run_data_analyser(data_dir: str):
             start = int(plot_range.split('-')[0])
             end = int(plot_range.split('-')[1])
             plot_list = file_list[start:end]
-            processes = max(8, len(plot_list))
+            processes = min(8, len(plot_list))
 
             with Pool(processes) as pool:
                 pool.map(plot_analysis, plot_list)
@@ -721,6 +755,7 @@ def run_data_analyser(data_dir: str):
 
 
 if __name__ == "__main__":
-    # plot_analysis('/Users/joaoreis/Documents/Study/Masters/Final_Project/abm_opinion_dyn/data/run-(50ag|1000ep|7po|0.65ss|0.2ir|or=0.15|em(μ=0.35σ=0.15)|me(μ=0σ=0)|ba=-5|ca=[-0.85,-0.35,0.4,0.65]|se=69.dat')
+    # plot_analysis(
+    #     '/Users/joaoreis/Documents/Study/Masters/Final_Project/abm_opinion_dyn/data/run-(50ag|1000ep|7po|0.65ss|0.2ir|or=0.15|em(μ=0.35σ=0.15)|me(μ=0σ=0)|ba=-5|ca=[-0.85,-0.35,0.4,0.65]|se=69.dat')
     run_data_analyser(
         '/Users/joaoreis/Documents/Study/Masters/Final_Project/abm_opinion_dyn/data')

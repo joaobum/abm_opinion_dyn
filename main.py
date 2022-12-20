@@ -11,8 +11,9 @@ from analysis import Analysis, run_data_analyser
 
 
 def instantiate_simulation(config):
-    print(f'PID {os.getpid()} running: {config}')
+    print(f'PID {os.getpid()} running -> {config}')
     model = Model(
+        config['n_epochs'],
         config['n_policies'],
         config['social_sparsity'],
         config['interaction_ratio'],
@@ -23,19 +24,19 @@ def instantiate_simulation(config):
         config['media_conformities_mean'],
         config['media_conformities_std']
     )
-    model.run(N_EPOCHS)
+    model.run()
     analysis = Analysis(model_data=model.data)
 
     if config['save_to_file']:
         analysis.save_to_file()
     if config['plot_analysis']:
-        # analysis.plot_social_network()
         analysis.plot_full_analysis()
 
 
 if __name__ == "__main__":
     
     # config = {
+    #     'n_epochs': 600,
     #     'n_policies': 3,
     #     'social_sparsity': 0.75,
     #     'interaction_ratio': 0.3,
@@ -66,6 +67,7 @@ if __name__ == "__main__":
                                 for media_conformities_mean in MEDIA_CONFORMITY_MEAN:
                                     for media_conformities_std in MEDIA_CONFORMITY_STD:
                                         config_list.append({
+                                            'n_epochs': N_EPOCHS,
                                             'n_policies': n_policies,
                                             'social_sparsity': social_sparsity,
                                             'interaction_ratio': interaction_ratio,
