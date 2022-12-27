@@ -1,4 +1,4 @@
-import os 
+import os
 import time
 import datetime
 
@@ -69,8 +69,14 @@ class Model:
         # Populate the agents array. The agents initialisation draws values
         # for their opinion array based on initial orientation and emotion.
         self.agents = [
-            Agent(i, self.n_policies, agents_orientations[i], self.agents_emotions[i],
-                  self.adjacency_matrix[i], self.media_conformities[i])
+            Agent(
+                i, 
+                self.n_policies, 
+                agents_orientations[i], 
+                self.agents_emotions[i], 
+                self.media_conformities[i], 
+                self.adjacency_matrix[i]
+            )
             for i in range(AGENTS_COUNT)
         ]
 
@@ -357,6 +363,7 @@ class Model:
 
             # Step the model
             self.step()
-            
-        print(f'PID {os.getpid()} -> Simulation concluded in {datetime.timedelta(seconds=(time.perf_counter()-tic))}.')
+
+        print(
+            f'PID {os.getpid()} -> Simulation concluded in {datetime.timedelta(seconds=(time.perf_counter()-tic))}.')
         print('********************************************************************************\n')

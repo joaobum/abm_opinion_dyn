@@ -1,5 +1,6 @@
 from multiprocessing import Pool
 import glob
+import os
 
 import numpy as np
 import pickle
@@ -9,8 +10,10 @@ from configuration import *
 import networkx as nx
 from sklearn.decomposition import PCA
 
-class Analysis:
+
+class ModelAnalysis:
     def __init__(self, model_data=None, load_from_path=None) -> None:
+        print(f'PID {os.getpid()} generating data analysis')
         if model_data is not None:
             self.data = model_data
 
@@ -36,7 +39,8 @@ class Analysis:
         )
         self.max_mean_opinions = np.max(self.mean_opinions)
         self.min_mean_opinions = np.min(self.mean_opinions)
-        self.mean_opinions_margin = abs((self.max_mean_opinions + self.min_mean_opinions) / 2) * 0.1
+        self.mean_opinions_margin = abs(
+            (self.max_mean_opinions + self.min_mean_opinions) / 2) * 0.1
         # Initialise min and max to set plot boundaries (will be tweaked in case of PCA)
         self.o_max = [1, 1, 1]
         self.o_min = [-1, -1, -1]
@@ -56,7 +60,7 @@ class Analysis:
         self.graphs_densities = np.array(
             [nx.average_clustering(graph) for graph in self.graphs]
         )
-        
+
         self.graphs_densities = np.array(
             [nx.average_clustering(graph) for graph in self.graphs]
         )
@@ -65,8 +69,6 @@ class Analysis:
         self.max_degree = 0
         self.max_degree_count = 0
         self.get_max_degree()
-        
-        
 
     def save_to_file(self):
         # Save snaphsots to file
@@ -85,14 +87,17 @@ class Analysis:
         self.communities_count = []
         self.community_outliers = []
         for graph in self.graphs:
-            communities = [len(c) for c in list(nx.connected_components(graph))]
-            filtered_in = list(filter(lambda community_size: community_size >= self.min_community_size, communities))
-            filtered_out = list(filter(lambda community_size: community_size < self.min_community_size, communities))
+            communities = [len(c)
+                           for c in list(nx.connected_components(graph))]
+            filtered_in = list(filter(
+                lambda community_size: community_size >= self.min_community_size, communities))
+            filtered_out = list(filter(
+                lambda community_size: community_size < self.min_community_size, communities))
             self.communities_count.append(len(filtered_in))
             self.community_outliers.append(np.sum(filtered_out))
-            
+
         self.max_communities = max(self.communities_count)
-            
+
     def get_graph_network_traces(self, step=0):
         graph = self.graphs[step]
         opinions = self.opinions[step]
@@ -139,12 +144,6 @@ class Analysis:
                 reversescale=False,
                 color=[],
                 size=4,
-                # colorbar=dict(
-                #     thickness=15,
-                #     title='Node Connections',
-                #     xanchor='left',
-                #     titleside='right'
-                # ),
                 line_width=2
             ),
             showlegend=False
@@ -156,7 +155,6 @@ class Analysis:
             node_adjacencies.append(len(adjacencies[1]))
             node_text.append(
                 f'connections: {len(adjacencies[1])}\nopinions: {self.opinions[step][node]}')
-            # node_text.append(f'opinions: {self.opinions[step][node]}')
 
         node_trace.marker.color = node_adjacencies
         node_trace.text = node_text
@@ -177,21 +175,6 @@ class Analysis:
             x=np.arange(0, len(mean_opinions)),
             y=mean_opinions,
             mode='markers',
-            # hoverinfo='text',
-            # marker=dict(
-            #     showscale=False,
-            #     colorscale='YlGnBu',
-            #     reversescale=False,
-            #     color=[],
-            #     size=4,
-            #     # colorbar=dict(
-            #     #     thickness=15,
-            #     #     title='Node Connections',
-            #     #     xanchor='left',
-            #     #     titleside='right'
-            #     # ),
-            #     line_width=2
-            # ),
             showlegend=False
         )
 
@@ -317,7 +300,7 @@ class Analysis:
         components = pca.fit_transform(opinion_array)
         return components, pca.explained_variance_ratio_
 
-    def plot_full_analysis(self, show=True, save=False):
+    def plot_model_analysis(self, show=True, save=False):
         if show and save:
             print('Plotting and saving full analysis...')
         elif show:
@@ -335,27 +318,27 @@ class Analysis:
         # Create initial plots, the same order here needs to be followed in the frames array
         plot_rows = [
             # Social network
-            1, 1, 
-            # Histogram 
-            3, 
+            1, 1,
+            # Histogram
+            3,
             # Graph
             2, 2, 2,
             # Voting
             1, 1]
         plot_cols = [
             # Social network
-            1, 1, 
-            # Histogram 
-            2, 
+            1, 1,
+            # Histogram
+            2,
             # Graph
             2, 2, 2,
             # Voting
             2, 2]
         secondary_ys = [
             # Social network
-            False, False, 
-            # Histogram 
-            False, 
+            False, False,
+            # Histogram
+            False,
             # Graph
             False, False, True,
             # Voting
@@ -372,7 +355,7 @@ class Analysis:
         fig.add_traces((self.get_graph_network_traces() +
                         self.get_graph_histogram_trace() +
                         # self.get_graph_density_traces() +
-                        self.get_community_traces() + 
+                        self.get_community_traces() +
                         self.get_mean_opinions_trace() +
                         self.get_vote_polls_traces()),
                        rows=plot_rows,
@@ -386,8 +369,8 @@ class Analysis:
             # Tracing needs to be in the same order as the initial figures
             data=(self.get_graph_network_traces(step) +
                   self.get_graph_histogram_trace(step) +
-                #   self.get_graph_density_traces(step) +
-                  self.get_community_traces(step) + 
+                  #   self.get_graph_density_traces(step) +
+                  self.get_community_traces(step) +
                   self.get_mean_opinions_trace(step) +
                   self.get_vote_polls_traces(step)
                   ),
@@ -395,7 +378,7 @@ class Analysis:
             traces=list(range(len(plot_rows)))
         ) for step in range(self.n_snapshots)]
         fig.update(frames=frames)
-        
+
         # For complex figures with custom rations and axes,
         # layout must be set in low-level
         layout = dict(
@@ -574,127 +557,194 @@ class Analysis:
             print('Showing plot...')
             fig.show()
 
-    # def plot_social_network(self):
-    #     print('Plotting social network...')
-    #     fig = go.Figure(
-    #         data=self.get_graph_network_traces(),
-    #         layout=go.Layout(
-    #             title=f'{self.n_agents} agents, {self.data["n_policies"]} policies, sparsity={self.data["social_sparsity"]}, interact={self.data["interaction_ratio"]}, conn={self.data["init_connections"]}, orientations=(σ={self.data["orientations_std"]}), emotions (μ={self.data["emotions_mean"]},σ={self.data["emotions_std"]}), media (μ={self.data["media_conformities_mean"]},σ={self.data["media_conformities_std"]}) balance {self.data["connections_balance"]}',
-    #             margin={
-    #                 't': 50,
-    #                 'b': 50,
-    #                 'l': 50,
-    #                 'r': 50
-    #             },
-    #             updatemenus=[{
-    #                 'buttons': [
-    #                     {
-    #                         'args': [
-    #                             [str(i) for i in range(self.n_snapshots)],
-    #                             {
-    #                                 'frame': {
-    #                                     'duration': 500.0,
-    #                                     'redraw': True
-    #                                 },
-    #                                 'fromcurrent': True,
-    #                                 'transition': {
-    #                                     'duration': 500,
-    #                                     'easing': 'linear'
-    #                                 }
-    #                             }
-    #                         ],
-    #                         'label': 'Play',
-    #                         'method': 'animate'
-    #                     },
-    #                     {
-    #                         'args': [
-    #                             [None],
-    #                             {
-    #                                 'frame': {
-    #                                     'duration': 0,
-    #                                     'redraw': True
-    #                                 },
-    #                                 'mode': 'immediate',
-    #                                 'transition': {
-    #                                     'duration': 0
-    #                                 }
-    #                             }
-    #                         ],
-    #                         'label': 'Pause',
-    #                         'method': 'animate'
-    #                     }
-    #                 ],
-    #                 'direction': 'left',
-    #                 'pad': {
-    #                     'r': 10,
-    #                     't': 85
-    #                 },
-    #                 'showactive': True,
-    #                 'type': 'buttons',
-    #                 'x': 0.1,
-    #                 'y': 0,
-    #                 'xanchor': 'right',
-    #                 'yanchor': 'top'
-    #             }],
-    #             sliders=[{
-    #                 'yanchor': 'top',
-    #                 'xanchor': 'left',
-    #                 'currentvalue': {
-    #                     'font': {
-    #                         'size': 16
-    #                     },
-    #                     'prefix': 'Epoch: ',
-    #                     'visible': True,
-    #                     'xanchor': 'right'
-    #                 },
-    #                 'pad': {
-    #                     'b': 10,
-    #                     't': 50
-    #                 },
-    #                 'len': 0.9,
-    #                 'x': 0.1,
-    #                 'y': 0,
-    #                 'steps': [
-    #                     {
-    #                         'args': [
-    #                             [str(i)],
-    #                             {
-    #                                 'frame': {
-    #                                     'duration': 500.0,
-    #                                     'easing': 'linear',
-    #                                     'redraw': True
-    #                                 },
-    #                                 'transition': {
-    #                                     'duration': 0,
-    #                                     'easing': 'linear'
-    #                                 }
-    #                             }
-    #                         ],
-    #                         'label': str(self.epochs[i]),
-    #                         'method': 'animate'
-    #                     }
-    #                     for i in range(self.n_snapshots)
-    #                 ]
-    #             }]
-    #         ),
-    #         frames=[dict(
-    #             name=str(step),
-    #             # Tracing needs to be in the same order as the initial figures
-    #             data=self.get_graph_network_traces(step)
-    #         ) for step in range(self.n_snapshots)]
-    #     )
 
-    #     fig.show()
+class StatisticalAnalysis:
+    def __init__(self, models_results, parameter_name, parameter_values) -> None:
+        self.parameter_name = parameter_name
+        self.parameter_values = parameter_values
+        self.min_community_size = len(models_results[0].agents) * 0.05
+        self.n_communities_mean = []
+        self.n_communities_var = []
+        self.n_outliers_mean = []
+        self.n_outliers_var = []
+        self.mean_opinions_mean = []
+        self.mean_opinions_var = []
+        self.var_opinions_mean = []
+        self.var_opinions_var = []
+
+        # Break down the model results in segments of same parameter value
+        results_segments = []
+        for parameter_value in parameter_values:
+            result_segment = []
+            for model_result in models_results:
+                if model_result.data[parameter_name] == parameter_value:
+                    result_segment.append(model_result)
+            results_segments.append(result_segment)
+
+        for result_segment in results_segments:
+            self.compute_communities(result_segment)
+            self.compute_mean_opinions(result_segment)
+
+    def compute_communities(self, result_segment):
+        n_communities = []
+        n_outliers = []
+
+        for result in result_segment:
+            graph = nx.from_numpy_matrix(result.adjacency_matrix)
+            communities = [len(c)
+                           for c in list(nx.connected_components(graph))]
+            filtered_in = list(filter(
+                lambda community_size: community_size >= self.min_community_size, communities))
+            filtered_out = list(
+                filter(lambda community_size: community_size < self.min_community_size, communities))
+
+            n_communities.append(len(filtered_in))
+            n_outliers.append(np.sum(filtered_out))
+
+        self.n_communities_mean.append(np.mean(n_communities))
+        self.n_communities_var.append(np.var(n_communities))
+        self.n_outliers_mean.append(np.mean(n_outliers))
+        self.n_outliers_var.append(np.var(n_outliers))
+
+    def compute_mean_opinions(self, result_segment):
+        mean_opinions = []
+        mean_opinions_var = []
+
+        for result in result_segment:
+            opinions_array = np.array(
+                [snapshot['group_opinions']
+                    for snapshot in result.data['snapshots']]
+            )
+            mean_opinions_array = np.array(
+                [np.mean(opinions) for opinions in opinions_array]
+            )
+
+            mean_opinions.append(mean_opinions_array[-1])
+            mean_opinions_var.append(np.var(mean_opinions_array))
+
+        self.mean_opinions_mean.append(np.mean(mean_opinions))
+        self.mean_opinions_var.append(np.var(mean_opinions))
+        self.var_opinions_mean.append(np.mean(mean_opinions_var))
+        self.var_opinions_var.append(np.var(mean_opinions_var))
+
+    def plot_statistical_analysis(self):
+        fig = make_subplots(
+            rows=1,
+            cols=2,
+            specs=[
+                [
+                    {'type': 'xy', 'secondary_y': True},
+                    {'type': 'xy', 'secondary_y': True}
+                ]
+            ],
+            subplot_titles=[
+                'Community analysis',
+                'Mean opinion analysis'
+            ]
+        )
+        layout = dict(
+            title=f'Statistical analysis for varying values of {self.parameter_name}',
+            height=500,
+            width=1100,
+            xaxis1={
+                'anchor': 'y1',
+                'title': self.parameter_name,
+                'range': [self.parameter_values[0], self.parameter_values[-1]]
+            },
+            yaxis1={
+                'anchor': 'x1',
+                'title': 'final number of communities'
+            },
+            yaxis2={
+                'anchor': 'x1',
+                'title': 'final number of outliers',
+                'side': 'right'
+            },
+            xaxis2={
+                'anchor': 'y3',
+                'title': self.parameter_name,
+                'range': [self.parameter_values[0], self.parameter_values[-1]]
+            },
+            yaxis3={
+                'anchor': 'x2',
+                'title': 'final mean opinions',
+            },
+            yaxis4={
+                'title': 'mean opinions variance',
+                'side': 'right'
+            },
+            margin={
+                't': 60,
+                'b': 20,
+                'l': 20,
+                'r': 20
+            })
+        fig.update_layout(layout)
+
+        fig.add_trace(
+            go.Scatter(
+                name='n_outliers',
+                x=self.parameter_values,
+                y=self.n_outliers_mean,
+                error_y=dict(
+                    type='data',
+                    array=self.n_outliers_var,
+                    visible=True)
+            ),
+            row=1,
+            col=1,
+            secondary_y=True)
+        
+        fig.add_trace(
+            go.Scatter(
+                name='n_communities',
+                x=self.parameter_values,
+                y=self.n_communities_mean,
+                error_y=dict(
+                    type='data',
+                    array=self.n_communities_var,
+                    visible=True)
+            ),
+            row=1,
+            col=1)
+        
+        fig.add_trace(
+            go.Scatter(
+                name='mean opinions var',
+                x=self.parameter_values,
+                y=self.var_opinions_mean,
+                error_y=dict(
+                    type='data',
+                    array=self.var_opinions_var,
+                    visible=True)
+            ),
+            row=1,
+            col=2,
+            secondary_y=True)
+        fig.add_trace(
+            go.Scatter(
+                name='mean opinions',
+                x=self.parameter_values,
+                y=self.mean_opinions_mean,
+                error_y=dict(
+                    type='data',
+                    array=self.mean_opinions_var,
+                    visible=True)
+            ),
+            row=1,
+            col=2)
+
+        fig.show()
 
 
 def plot_analysis(file_path: str):
-    analysis = Analysis(load_from_path=file_path)
-    analysis.plot_full_analysis(show=True, save=False)
+    analysis = ModelAnalysis(load_from_path=file_path)
+    analysis.plot_model_analysis(show=True, save=False)
 
 
 def save_analysis(file_path: str):
-    analysis = Analysis(load_from_path=file_path)
-    analysis.plot_full_analysis(show=False, save=True)
+    analysis = ModelAnalysis(load_from_path=file_path)
+    analysis.plot_model_analysis(show=False, save=True)
 
 
 def run_data_analyser(data_dir: str):

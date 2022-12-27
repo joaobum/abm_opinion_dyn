@@ -10,7 +10,7 @@ def normpdf(x, sd):
 
 
 class Agent:
-    def __init__(self, id: int, n_policies: int, orientation: float, emotion: float, adjacency: np.array, media_conformity: float) -> None:
+    def __init__(self, id: int, n_policies: int, orientation: float, emotion: float, media_conformity: float, adjacency: np.array) -> None:
         if VERBOSITY & V_AGENT:
             print(
                 f'Initialising agent {id}:\torientation = {orientation:.3f}\temotion = {emotion:.3f}')
@@ -24,7 +24,7 @@ class Agent:
         # Agents that are more emotional about their opinions will have a narrower distribution
         # around their orientation. Orientation gets normalised from [-1, 1] to [0, 1]
         self.opinions = np.random.normal(
-            orientation, ((1 - emotion)*(1 - (orientation + 1) / 2)), n_policies)
+            orientation, ((1 - emotion)*(1 - (abs(orientation) + 1) / 2)), n_policies)
         self.opinions = np.clip(self.opinions, OPINION_MIN, OPINION_MAX)
         # Opinion strength is normalised by max norm in the space
         self.opinion_strength =  np.linalg.norm(
@@ -142,7 +142,7 @@ class Agent:
 
     def add_noise(self, noise):
         # Just add the noise, it was already attenuated by emotions in the model scope
-        self.opinions += noise
+        self.opinions += noise 
         # Make sure we're still in range
         self.opinions = np.clip(self.opinions, OPINION_MIN, OPINION_MAX)
 
