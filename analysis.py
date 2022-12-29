@@ -8,6 +8,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from configuration import *
 import networkx as nx
+import time
+from datetime import datetime
 from sklearn.decomposition import PCA
 
 
@@ -564,13 +566,17 @@ class StatisticalAnalysis:
         self.parameter_values = parameter_values
         self.min_community_size = len(models_results[0].agents) * 0.05
         self.n_communities_mean = []
-        self.n_communities_var = []
+        self.n_communities_max = []
+        self.n_communities_min = []
         self.n_outliers_mean = []
-        self.n_outliers_var = []
+        self.n_outliers_max = []
+        self.n_outliers_min = []
         self.mean_opinions_mean = []
-        self.mean_opinions_var = []
+        self.mean_opinions_max = []
+        self.mean_opinions_min = []
         self.var_opinions_mean = []
-        self.var_opinions_var = []
+        self.var_opinions_max = []
+        self.var_opinions_min = []
 
         # Break down the model results in segments of same parameter value
         results_segments = []
@@ -602,9 +608,11 @@ class StatisticalAnalysis:
             n_outliers.append(np.sum(filtered_out))
 
         self.n_communities_mean.append(np.mean(n_communities))
-        self.n_communities_var.append(np.var(n_communities))
+        self.n_communities_max.append(np.max(n_communities))
+        self.n_communities_min.append(np.min(n_communities))
         self.n_outliers_mean.append(np.mean(n_outliers))
-        self.n_outliers_var.append(np.var(n_outliers))
+        self.n_outliers_max.append(np.max(n_outliers))
+        self.n_outliers_min.append(np.min(n_outliers))
 
     def compute_mean_opinions(self, result_segment):
         mean_opinions = []
@@ -623,11 +631,13 @@ class StatisticalAnalysis:
             mean_opinions_var.append(np.var(mean_opinions_array))
 
         self.mean_opinions_mean.append(np.mean(mean_opinions))
-        self.mean_opinions_var.append(np.var(mean_opinions))
+        self.mean_opinions_max.append(np.max(mean_opinions))
+        self.mean_opinions_min.append(np.min(mean_opinions))
         self.var_opinions_mean.append(np.mean(mean_opinions_var))
-        self.var_opinions_var.append(np.var(mean_opinions_var))
+        self.var_opinions_max.append(np.max(mean_opinions_var))
+        self.var_opinions_min.append(np.min(mean_opinions_var))
 
-    def plot_statistical_analysis(self):
+    def plot_statistical_analysis(self, show=True, save=False, prefix='normal'):
         fig = make_subplots(
             rows=1,
             cols=2,
@@ -642,6 +652,7 @@ class StatisticalAnalysis:
                 'Mean opinion analysis'
             ]
         )
+        x_padding = (self.parameter_values[-1] - self.parameter_values[0])/20
         layout = dict(
             title=f'Statistical analysis for varying values of {self.parameter_name}',
             height=500,
@@ -649,7 +660,9 @@ class StatisticalAnalysis:
             xaxis1={
                 'anchor': 'y1',
                 'title': self.parameter_name,
-                'range': [self.parameter_values[0], self.parameter_values[-1]]
+                'range': [self.parameter_values[0] - x_padding, self.parameter_values[-1] + x_padding],
+                'tickmode': 'array',
+                'tickvals': self.parameter_values[::2] if len(self.parameter_values) > 6 else self.parameter_values
             },
             yaxis1={
                 'anchor': 'x1',
@@ -663,22 +676,20 @@ class StatisticalAnalysis:
             xaxis2={
                 'anchor': 'y3',
                 'title': self.parameter_name,
-                'range': [self.parameter_values[0], self.parameter_values[-1]]
+                'range': [self.parameter_values[0] - x_padding, self.parameter_values[-1] + x_padding],
+                'tickmode': 'array',
+                'tickvals': self.parameter_values[::2] if len(self.parameter_values) > 6 else self.parameter_values
             },
             yaxis3={
                 'anchor': 'x2',
                 'title': 'final mean opinions',
             },
             yaxis4={
+                'anchor': 'x2',
                 'title': 'mean opinions variance',
                 'side': 'right'
             },
-            margin={
-                't': 60,
-                'b': 20,
-                'l': 20,
-                'r': 20
-            })
+          )
         fig.update_layout(layout)
 
         fig.add_trace(
@@ -688,13 +699,16 @@ class StatisticalAnalysis:
                 y=self.n_outliers_mean,
                 error_y=dict(
                     type='data',
-                    array=self.n_outliers_var,
-                    visible=True)
+                    symmetric=False,
+                    array=np.subtract(self.n_outliers_max, self.n_outliers_mean),
+                    arrayminus=np.subtract(self.n_outliers_mean, self.n_outliers_min),
+                    visible=True
+                )
             ),
             row=1,
             col=1,
             secondary_y=True)
-        
+
         fig.add_trace(
             go.Scatter(
                 name='n_communities',
@@ -702,12 +716,15 @@ class StatisticalAnalysis:
                 y=self.n_communities_mean,
                 error_y=dict(
                     type='data',
-                    array=self.n_communities_var,
-                    visible=True)
+                    symmetric=False,
+                    array=np.subtract(self.n_communities_max, self.n_communities_mean),
+                    arrayminus=np.subtract(self.n_communities_mean, self.n_communities_min),
+                    visible=True
+                )
             ),
             row=1,
             col=1)
-        
+
         fig.add_trace(
             go.Scatter(
                 name='mean opinions var',
@@ -715,12 +732,16 @@ class StatisticalAnalysis:
                 y=self.var_opinions_mean,
                 error_y=dict(
                     type='data',
-                    array=self.var_opinions_var,
-                    visible=True)
+                    symmetric=False,
+                    array=np.subtract(self.var_opinions_max, self.var_opinions_mean),
+                    arrayminus=np.subtract(self.var_opinions_mean, self.var_opinions_min),
+                    visible=True
+                )
             ),
             row=1,
             col=2,
             secondary_y=True)
+        
         fig.add_trace(
             go.Scatter(
                 name='mean opinions',
@@ -728,13 +749,26 @@ class StatisticalAnalysis:
                 y=self.mean_opinions_mean,
                 error_y=dict(
                     type='data',
-                    array=self.mean_opinions_var,
-                    visible=True)
+                    symmetric=False,
+                    array=np.subtract(self.mean_opinions_max, self.mean_opinions_mean),
+                    arrayminus=np.subtract(self.mean_opinions_mean, self.mean_opinions_min),
+                    visible=True
+                )
             ),
             row=1,
             col=2)
-
-        fig.show()
+        
+        if save:
+            svg_file = DATA_DIR + f'svg/{self.parameter_name}-{prefix}-{int(time.time())}.svg'
+            print(f'Writing svg to: {svg_file}')
+            fig.write_image(svg_file)
+            
+            png_file = DATA_DIR + f'png/{self.parameter_name}-{prefix}-{int(time.time())}.png'
+            print(f'Writing png to: {png_file}')
+            fig.write_image(png_file)
+        if show:
+            print('Showing plot...')
+            fig.show()
 
 
 def plot_analysis(file_path: str):
