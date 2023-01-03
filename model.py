@@ -1,28 +1,69 @@
+###############################################################################
+#   University of Sussex - Department of Informatics
+#   MSc in Artificial Intelligence and Adaptive Systems
+#   
+#   Project title: A co-evolution model for opinions in a social network
+#   Candidate number: 229143
+#   
+###############################################################################
+
+# Standard libraries
 import os
 import time
 import datetime
-
+# External packages
 import numpy as np
 import networkx.generators.random_graphs as random_graphs
 import networkx as nx
-
+# Internal modules
 from configuration import *
 from agent import Agent
 
-
 class Model:
-
+    """
+    Definition of the Model class. The model class contains an instantiation 
+    of all agents as well as methods to assist in the time-evolution of the system.
+    """
     def __init__(self,
-                 n_epochs,
-                 n_policies,
-                 social_sparsity,
-                 interaction_ratio,
-                 init_connections,
-                 orientations_std,
-                 emotions_mean,
-                 emotions_std,
-                 media_conformities_mean,
-                 media_conformities_std):
+                 n_epochs: int,
+                 n_policies: int,
+                 social_sparsity: float,
+                 interaction_ratio: float,
+                 init_connections: float,
+                 orientations_std: float,
+                 emotions_mean: float,
+                 emotions_std: float,
+                 media_conformities_mean: float,
+                 media_conformities_std: float) -> None:
+        """
+        Initialises an instance of the model class. It first initialises the social
+        graph based on number of agents an initial connectivity, it then draws all agents
+        init parameters from normal distributions, and finally proceeds to instantiate
+        an array of agents for the drawn values. Finally, attraction and trust, as well
+        as the data dictionary are initialised.
+
+        Arguments:
+            n_epochs {int} -- The number of epochs the model should run for.
+            n_policies {int} -- The opinion-space dimensionality P for the system.
+            social_sparsity {float} -- The threshold value of social attraction n that 
+            determines the creation or destruction of connections. Higher values make 
+            connections harder to create and thus sparser networks.
+            interaction_ratio {float} -- The ratio of the agents’ pool that will interact 
+            at each time step. Higher values mean more active networks.
+            init_connections {float} -- Value used in the initialisation of the social graph. 
+            It dictates the probability of each node to be connected to another.
+            orientations_std {float} -- Standard deviation of the normal distribution that 
+            randomly draws agents’ initial political orientation.
+            emotions_mean {float} -- Mean value of the normal distribution that randomly 
+            draws agents’ emotional affectiveness.
+            emotions_std {float} -- Standard deviation of the normal distribution that 
+            randomly draws agents’ emotional affectiveness.
+            media_conformities_mean {float} -- Mean value of the normal distribution that 
+            randomly draws agents’ conformities to the media.
+            media_conformities_std {float} -- Standard deviation of the normal distribution 
+            that randomly draws agents’ conformities to the media.
+        """
+
 
         # Store model parameters
         self.n_epochs = n_epochs
@@ -111,6 +152,13 @@ class Model:
             0, n_epochs, N_SNAPSHOTS).astype(int)
 
     def step(self):
+        """
+        Steps the model of one epoch. It first selects a sub-set of active agents and
+        the main three step procedures are performed:
+        1. Update of trust matrices.
+        2. Opinions interaction.
+        3. Social attraction and connections update.
+        """
         # We first select a random sample of the agent's pool without replacement
         active_agents = np.random.choice(AGENTS_COUNT, int(
             AGENTS_COUNT * self.interaction_ratio), False)
@@ -215,6 +263,10 @@ class Model:
         # print(f'3  ->  {time.perf_counter() - tic}')
 
     def refresh_group_opinions(self):
+        """
+        Helper function to refresh the local aggregation array of the 
+        agents' opinions and their strengths
+        """
         self.group_opinions = np.array(
             [agent.opinions for agent in self.agents]
         )
@@ -228,7 +280,15 @@ class Model:
             print_array(self.group_opinions)
             print_array(self.group_opinion_strengths)
 
-    def update_agents_attractions(self, active_agents):
+    def update_agents_attractions(self, active_agents: np.ndarray) -> None:
+        """
+        Iterate throug all active agent's updating their social attraction
+        towards every other agent (except themselves)
+
+        Arguments:
+            active_agents {np.ndarray} -- Array of integers containing the
+            indexes of all active agents for the current time step.
+        """
         # Iterate over all active agents
         for active_agent in active_agents:
             for reference_agent in range(AGENTS_COUNT):
@@ -245,6 +305,10 @@ class Model:
                 )
 
     def refresh_group_trust(self):
+        """
+        Helper function to update the local aggregation array for 
+        agent's social trust (to be used in matrix operations)
+        """
         self.group_trust = np.array(
             [agent.agents_trust for agent in self.agents]
         )
@@ -254,6 +318,11 @@ class Model:
             print_array(self.group_trust)
 
     def refresh_media_opinions(self):
+        """
+        Updates the media opinion arrays by drawing their opinion vectors
+        from normal distributions parametrised by their main orientation
+        and opinon flexibility
+        """
         # Each media outlet will draw an opinion value for each policy
         # from a normal distribution, with the mean representing the outlet's
         # main orientation, and std is the flexibility
@@ -277,7 +346,15 @@ class Model:
             print('*\tMedia opinions refreshed:')
             print_array(self.media_opinions)
 
-    def update_media_attractions(self, active_agents):
+    def update_media_attractions(self, active_agents: np.ndarray) -> None:
+        """
+        Iterate over all active agents, updating their attraction to the media
+        outlets.
+
+        Arguments:
+            active_agents {np.ndarray} -- Array of integers containing the
+            indexes of all active agents for the current time step.
+        """
         # Iterate over all active agents
         for agent in active_agents:
             for media in range(MEDIA_OUTLETS_COUNT):
@@ -287,6 +364,10 @@ class Model:
                         self.media_opinions[media])
 
     def refresh_media_trust(self):
+        """
+        Helper function to normalise the media attraction for all agent's,
+        resulting in their relative trust.
+        """
         # Media trust is calculated by row normalising the attraction values
         self.media_trust = self.media_attractions / \
             np.sum(self.media_attractions, axis=1)[:, None]
@@ -296,6 +377,10 @@ class Model:
             print_array(self.media_trust)
 
     def refresh_social_graph(self):
+        """
+        Helper function to update the local aggragation array for the adjacency
+        matrix. The social graph object is then updated.
+        """
         self.adjacency_matrix = np.array(
             [agent.adjacency for agent in self.agents]
         )
@@ -306,7 +391,16 @@ class Model:
             print('*\tAdjacency matrix refreshed:')
             print_array(self.adjacency_matrix)
 
-    def get_election_poll(self):
+    def get_election_poll(self) -> np.ndarray:
+        """
+        Simulates an election poll by calculating the relative attraction
+        and consequently trust that each agent has on each political
+        candidate
+
+        Returns:
+            np.ndarray -- Array of normalised mean attractions for each
+            political candidate.
+        """
         # The poll is based on drawing candidate's opinions for each poll
         candidates_opinions = np.array(
             [
@@ -329,12 +423,6 @@ class Model:
                     self.agents[agent].get_social_attraction(
                         candidates_opinions[candidate])
 
-        # # Poll is based on agents choosing the candidate they're most
-        # # attracted to
-        # agents_votes = list(np.argmax(candidate_attractions, axis=1))
-        # vote_count = [agents_votes.count(i) for i in range(CANDIDATES_COUNT)]
-        # poll = vote_count / np.sum(vote_count)
-
         # The poll is the normalised mean of attractions
         mean_attractions = np.mean(candidate_attractions, axis=0)
         poll = mean_attractions / np.sum(mean_attractions)
@@ -342,6 +430,11 @@ class Model:
         return poll
 
     def run(self):
+        """
+        Executes the model simulation as per initialisation parameters.
+        The method will iterate for n_epochs calling the step method and storing
+        a given number of snapshots to the data dictionary.
+        """
         print('\n********************************************************************************')
         print(f'PID {os.getpid()} -> Starting model run.\n')
         tic = time.perf_counter()

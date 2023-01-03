@@ -1,10 +1,20 @@
+###############################################################################
+#   University of Sussex - Department of Informatics
+#   MSc in Artificial Intelligence and Adaptive Systems
+#   
+#   Project title: A co-evolution model for opinions in a social network
+#   Candidate number: 229143
+#   
+###############################################################################
+
+# Standard libraries
 import os
 from multiprocessing import Pool
 import time
 import datetime
-
+# External packages
 import numpy as np
-
+# Internal modules
 from configuration import *
 from model import Model
 from analysis import ModelAnalysis, StatisticalAnalysis
@@ -14,7 +24,17 @@ MODEL_TEST = 0
 PARAMETER_SWEEP = 1
 STATISTICAL_ANALYSIS = 2
 
-def instantiate_simulation(config):
+def instantiate_simulation(config: dict) -> Model:
+    """
+    Helper function to assist in the multiprocess mapping of Model instantiations.
+
+    Arguments:
+        config {dict} -- The config dictionary containing all parameters required
+        for model initialisation, as well as save and plot flags.
+
+    Returns:
+        Model -- An instance of the model class containing all simulation results.
+    """
     print(f'PID {os.getpid()} running -> {config}')
     model = Model(
         config['n_epochs'],
@@ -41,20 +61,20 @@ def instantiate_simulation(config):
 
 if __name__ == "__main__":
     # Running more flags
-    running_mode = STATISTICAL_ANALYSIS
+    running_mode = MODEL_TEST
     
     if running_mode == MODEL_TEST:
         config = {
             'n_epochs': 600,
             'n_policies': 3,
-            'social_sparsity': 0.65,
-            'interaction_ratio': 0.3,
+            'social_sparsity': 0.2,
+            'interaction_ratio': 0.5,
             'init_connections': 0.15,
             'orientations_std': 0.15,
             'emotions_mean': 0.5,
             'emotions_std': 0.2,
-            'media_conformities_mean': 0.15,
-            'media_conformities_std': 0.05,
+            'media_conformities_mean': 0.0,
+            'media_conformities_std': 0.0,
             'save_to_file': True,
             'plot_analysis': True
         }
@@ -155,7 +175,7 @@ if __name__ == "__main__":
         stat_analysis = StatisticalAnalysis(model_results, 'social_sparsity', parameter_values)
         stat_analysis.plot_statistical_analysis(show=False, save=True)
         
-        Analysing variation in media conformity
+        # Analysing variation in media conformity
         config_list = []
         parameter_values = np.linspace(0, 0.2, 11)
         for media_conformities_mean in parameter_values:
@@ -235,6 +255,31 @@ if __name__ == "__main__":
             model_results = process_pool.map(instantiate_simulation, config_list)
         
         stat_analysis = StatisticalAnalysis(model_results, 'n_policies', parameter_values)
-        stat_analysis.plot_statistical_analysis(show=False, save=True)
+        stat_analysis.plot_statistical_analysis(show=False, save=True)  
             
+        # Analysing variation in social sparsity
+        config_list = []
+        parameter_values = [3, 5, 7, 10, 15, 20]
+        for n_policies in parameter_values:
+            for _ in range(iterations):
+                config_list.append({
+                    'n_epochs': N_EPOCHS,
+                    'n_policies': n_policies,
+                    'social_sparsity': 0.8,
+                    'interaction_ratio': 0.5,
+                    'init_connections': 0.1,
+                    'orientations_std': 0.15,
+                    'emotions_mean': 0.7,
+                    'emotions_std': 0.15,
+                    'media_conformities_mean': 0,
+                    'media_conformities_std': 0,
+                    'save_to_file': False,
+                    'plot_analysis': False
+                })
+                                            
+        # Create a process pool without limiting the number of processes
+        with Pool() as process_pool:
+            model_results = process_pool.map(instantiate_simulation, config_list)
         
+        stat_analysis = StatisticalAnalysis(model_results, 'n_policies', parameter_values)
+        stat_analysis.plot_statistical_analysis(show=False, save=True, prefix='sparse')

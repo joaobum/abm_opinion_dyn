@@ -1,6 +1,16 @@
-import numpy as np
-import math
+###############################################################################
+#   University of Sussex - Department of Informatics
+#   MSc in Artificial Intelligence and Adaptive Systems
+#   
+#   Project title: A co-evolution model for opinions in a social network
+#   Candidate number: 229143
+#   
+###############################################################################
+
+# Standard libraries
 import pathlib
+# External packages
+import numpy as np
 
 ############################################################################
 # Model parameters
