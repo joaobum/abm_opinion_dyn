@@ -368,7 +368,7 @@ class ModelAnalysis:
         candidates_traces.append(epoch_reference)
         return candidates_traces
 
-    def get_mean_opinions_trace(self) -> list:
+    def get_mean_opinions_trace(self, step=0) -> list:
         """
         Generates the population's mean opinion trace
 
@@ -1033,7 +1033,4 @@ def run_data_analyser(data_dir: str) -> None:
 
 
 if __name__ == "__main__":
-    # plot_analysis(
-    #     '/Users/joaoreis/Documents/Study/Masters/Final_Project/abm_opinion_dyn/data/run-(50ag|1000ep|7po|0.65ss|0.2ir|or=0.15|em(μ=0.35σ=0.15)|me(μ=0σ=0)|ba=-5|ca=[-0.85,-0.35,0.4,0.65]|se=69.dat')
-    run_data_analyser(
-        '/Users/joaoreis/Documents/Study/Masters/Final_Project/abm_opinion_dyn/data')
+    run_data_analyser(DATA_DIR)
